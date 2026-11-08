@@ -50,12 +50,16 @@ function action_snapshot(): void
         $card = ['saloon' => $i + 1, 'values' => [], 'issues' => []];
         foreach (FIELDS as $field => $meta) {
             $value = $latest ? ($latest[$field][$i] ?? null) : null;
-            $check = judge($field, $value);
+            // بازه مطلوب هر سالن از پنل ادمین خوانده می‌شود
+            $range = saloon_range($field, $i + 1);
+            $check = judge($field, $value, $i + 1);
             $card['values'][$field] = [
                 'value' => $value,
                 'status' => $check['status'],
                 'text' => $check['text'],
-                'good' => $meta['good'],
+                'good' => $range,
+                'default_good' => $meta['good'],
+                'custom' => $range !== [(int) $meta['good'][0], (int) $meta['good'][1]],
                 'label' => $meta['label'],
                 'unit' => $meta['unit'],
             ];
@@ -68,7 +72,7 @@ function action_snapshot(): void
                     'status' => $check['status'],
                     'value' => $value,
                     'unit' => $meta['unit'],
-                    'good' => $meta['good'],
+                    'good' => $range,
                 ];
             }
         }
@@ -100,6 +104,9 @@ function action_snapshot(): void
         'hasData' => $latest !== null,
         'updatedAt' => $updatedAt,
         'fields' => FIELDS,
+        'ranges' => good_ranges(),
+        'fieldsWithRanges' => fields_with_ranges(),
+        'rangesCustomized' => ranges_customized(),
         'histories' => $histories,
     ]);
 }

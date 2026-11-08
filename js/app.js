@@ -181,10 +181,15 @@
           " metric-icon text-" +
           statusTone(v.status) +
           '"></i></span>' +
-          '<span class="metric-range">' +
+          '<span class="metric-range' +
+          (v.custom ? " metric-range-custom" : "") +
+          '" title="' +
+          (v.custom ? "بازه تعیین‌شده توسط ادمین" : "بازه پیش‌فرض") +
+          '">' +
           faDigits(v.good[0]) +
           "–" +
           faDigits(v.good[1]) +
+          (v.custom ? ' <i class="bi bi-pin-angle-fill"></i>' : "") +
           "</span>" +
           "</div>"
         );

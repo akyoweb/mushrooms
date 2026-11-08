@@ -228,15 +228,16 @@ function latest_snapshot(): array
 
 /**
  * وضعیت یک مقدار نسبت به بازه مطلوب
+ * اگر شماره سالن داده شود، بازه سفارشی همان سالن (از پنل ادمین) استفاده می‌شود.
  * @return array{status:string,text:string,tone:string}
  */
-function judge(string $field, ?float $value): array
+function judge(string $field, ?float $value, ?int $saloon = null): array
 {
     $meta = FIELDS[$field];
     if ($value === null) {
         return ['status' => 'nodata', 'text' => 'بدون داده', 'tone' => 'secondary'];
     }
-    [$low, $high] = $meta['good'];
+    [$low, $high] = $saloon !== null ? saloon_range($field, $saloon) : $meta['good'];
     if ($value < $low) {
         return ['status' => 'low', 'text' => 'کمتر از حد مطلوب', 'tone' => 'info'];
     }

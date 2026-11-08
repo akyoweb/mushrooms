@@ -13,6 +13,14 @@ require_once __DIR__ . '/database.php';
 /** مجموع تعداد سالن‌ها */
 define('SALOONS', SALOON_COUNT);
 
+/** نام سالن‌ها (برای نمایش در پنل ادمین و داشبورد) */
+function saloon_name(int $saloon): string
+{
+    return 'سالن ' . fa_num($saloon);
+}
+
+require_once __DIR__ . '/settings.php';
+
 /**
  * تعریف فیلدها
  *  - label  : نام نمایشی
@@ -23,7 +31,7 @@ define('SALOONS', SALOON_COUNT);
  *  - color  : رنگ نمودار
  */
 const FIELDS = [
-    // ترتیب کلیدها همان ترتیب ستون‌های جدول temps است (افقی: air, compost, RH)
+    // آرایه برگشتی تابع fields() با رنگ/واحد و بازه مطلوب سالن‌ها ترکیب می‌شود
     'air' => [
         'label' => 'دمای هوا',
         'unit'  => '°C',

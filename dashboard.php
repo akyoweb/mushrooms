@@ -1,9 +1,15 @@
 <?php
 require_once __DIR__ . '/monitor.php';
+require_once __DIR__ . '/auth.php';
 
 $saloons = SALOONS;
 $dashboardUrl = base_url() . 'dashboard.php';
 $entryUrl = base_url() . 'index.php';
+$admin = auth_check() ? auth_user() : null;
+$adminUrl = base_url() . 'admin.php';
+$loginUrl = base_url() . 'login.php?next=dashboard.php';
+$logoutUrl = base_url() . 'logout.php';
+$fields = fields_with_ranges();
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -31,6 +37,21 @@ $entryUrl = base_url() . 'index.php';
                 <a href="<?= htmlspecialchars($entryUrl) ?>" class="btn btn-sm btn-outline-light">
                     <i class="bi bi-plus-lg"></i> ثبت خوانش
                 </a>
+                <?php if ($admin): ?>
+                    <a href="<?= htmlspecialchars($adminUrl) ?>" class="btn btn-sm btn-warning fw-semibold">
+                        <i class="bi bi-sliders"></i> پنل ادمین
+                    </a>
+                    <span class="admin-chip d-none d-md-inline-flex">
+                        <i class="bi bi-person-circle"></i> <?= htmlspecialchars($admin['name']) ?>
+                    </span>
+                    <a href="<?= htmlspecialchars($logoutUrl) ?>" class="btn btn-sm btn-outline-light" title="خروج">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </a>
+                <?php else: ?>
+                    <a href="<?= htmlspecialchars($loginUrl) ?>" class="btn btn-sm btn-outline-light">
+                        <i class="bi bi-shield-lock"></i> ورود ادمین
+                    </a>
+                <?php endif; ?>
             </div>
         </div>
     </nav>
@@ -62,7 +83,7 @@ $entryUrl = base_url() . 'index.php';
         <!-- خلاصه بالا -->
         <div class="row g-3 mb-4" id="summaryRow">
             <?php foreach (FIELDS as $field => $meta): ?>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-sm-6 col-md-4">
                     <div class="summary-card" data-field="<?= htmlspecialchars($field) ?>">
                         <div class="summary-head">
                             <span class="summary-label"><?= htmlspecialchars($meta['label']) ?></span>
@@ -74,8 +95,13 @@ $entryUrl = base_url() . 'index.php';
                                 هشدار</span>
                         </div>
                         <div class="summary-foot">
-                            میانگین کل • محدوده مطلوب:
-                            <b><?= htmlspecialchars($meta['good'][0]) ?> – <?= htmlspecialchars($meta['good'][1]) ?></b>
+                            میانگین کل • پیش‌فرض مطلوب:
+                            <b><?= fa_num($meta['good'][0]) ?> – <?= fa_num($meta['good'][1]) ?></b>
+                            <?php if (ranges_customized()): ?>
+                                <a href="<?= htmlspecialchars($admin ? $adminUrl : $loginUrl) ?>" class="summary-link">
+                                    <i class="bi bi-sliders"></i> بازه هر سالن تنظیم شده
+                                </a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -197,7 +223,7 @@ $entryUrl = base_url() . 'index.php';
         window.APP = {
             apiUrl: <?= json_encode(base_url() . 'ajax.php') ?>,
             saloons: <?= (int) $saloons ?>,
-            fields: <?= json_encode(FIELDS, JSON_UNESCAPED_UNICODE) ?>
+            fields: <?= json_encode($fields, JSON_UNESCAPED_UNICODE) ?>
         };
     </script>
     <script src="js/app.js"></script>

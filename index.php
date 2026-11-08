@@ -1,8 +1,12 @@
 <?php
 require_once __DIR__ . '/monitor.php';
+require_once __DIR__ . '/auth.php';
 
 $saloons = SALOONS;
 $dashboardUrl = base_url() . 'dashboard.php';
+$admin = auth_check() ? auth_user() : null;
+$adminUrl = base_url() . 'admin.php';
+$loginUrl = base_url() . 'login.php?next=admin.php';
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -21,9 +25,20 @@ $dashboardUrl = base_url() . 'dashboard.php';
                 <span class="brand-icon"><i class="bi bi-pencil-square"></i></span>
                 <span>ثبت خوانش سالن‌ها</span>
             </a>
-            <a href="<?= htmlspecialchars($dashboardUrl) ?>" class="btn btn-sm btn-light ms-auto">
-                <i class="bi bi-speedometer2"></i> داشبورد
-            </a>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                <a href="<?= htmlspecialchars($dashboardUrl) ?>" class="btn btn-sm btn-light">
+                    <i class="bi bi-speedometer2"></i> داشبورد
+                </a>
+                <?php if ($admin): ?>
+                    <a href="<?= htmlspecialchars($adminUrl) ?>" class="btn btn-sm btn-warning fw-semibold">
+                        <i class="bi bi-sliders"></i> پنل ادمین
+                    </a>
+                <?php else: ?>
+                    <a href="<?= htmlspecialchars($loginUrl) ?>" class="btn btn-sm btn-outline-light">
+                        <i class="bi bi-shield-lock"></i> ورود ادمین
+                    </a>
+                <?php endif; ?>
+            </div>
         </div>
     </nav>
 
