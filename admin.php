@@ -249,6 +249,77 @@ $dashboardUrl = base_url() . 'dashboard.php';
             </div>
         </form>
 
+        <!-- ساختار متصل دیتابیس -->
+        <?php
+        $schemaInfo = monitor_boot();
+        $viewRows = monitor_rows(36);
+        $saloonList = saloon_rows();
+        ?>
+        <div class="panel mt-4">
+            <div class="panel-head">
+                <h2 class="panel-title"><i class="bi bi-diagram-3"></i> ساختار متصل دیتابیس</h2>
+                <span class="small text-muted">
+                    <?= fa_num(count($viewRows)) ?> سطر از ویو <code><?= T_VIEW ?></code>
+                    <?php if ($schemaInfo['migrated'] > 0): ?>
+                        • <span class="text-success"><?= fa_num($schemaInfo['migrated']) ?> نوبت خوانش قدیمی منتقل شد</span>
+                    <?php endif; ?>
+                </span>
+            </div>
+            <div class="panel-body">
+                <div class="schema-flow">
+                    <div class="schema-box">
+                        <b><i class="bi bi-house-door"></i> <?= T_SALOONS ?></b>
+                        <span><?= fa_num(count($saloonList)) ?> سالن</span>
+                    </div>
+                    <span class="schema-arrow">1 : N</span>
+                    <div class="schema-box">
+                        <b><i class="bi bi-thermometer-half"></i> <?= T_SALOON_D ?></b>
+                        <span>دما + رطوبت هر سالن</span>
+                    </div>
+                    <span class="schema-arrow">N : 1</span>
+                    <div class="schema-box">
+                        <b><i class="bi bi-clock-history"></i> <?= T_READINGS ?></b>
+                        <span>زمان هر نوبت خوانش</span>
+                    </div>
+                </div>
+
+                <div class="table-responsive mt-3">
+                    <table class="table table-sm table-hover align-middle mb-0 db-view-table">
+                        <thead>
+                            <tr>
+                                <th>reading_id</th>
+                                <th>read_at</th>
+                                <th>saloon</th>
+                                <th>air_temp</th>
+                                <th>compost_temp</th>
+                                <th>humidity</th>
+                                <th>status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (!$viewRows): ?>
+                                <tr><td colspan="7" class="text-center text-muted py-3">هنوز خوانشی ثبت نشده است.</td></tr>
+                            <?php endif; ?>
+                            <?php foreach ($viewRows as $row): ?>
+                                <tr>
+                                    <td class="text-muted"><?= fa_num($row['reading_id']) ?></td>
+                                    <td dir="ltr" class="text-end small"><?= htmlspecialchars((string) $row['read_at']) ?></td>
+                                    <td class="fw-semibold"><?= htmlspecialchars((string) $row['saloon']) ?></td>
+                                    <td><?= $row['air_temp'] === null ? '—' : fa_num((int) $row['air_temp']) ?></td>
+                                    <td><?= $row['compost_temp'] === null ? '—' : fa_num((int) $row['compost_temp']) ?></td>
+                                    <td><?= $row['humidity'] === null ? '—' : fa_num((int) $row['humidity']) . '٪' ?></td>
+                                    <td><span class="badge text-bg-<?= $row['status'] === 'OK' ? 'success' : ($row['status'] === 'OUT' ? 'warning' : 'secondary') ?>"><?= htmlspecialchars((string) $row['status']) ?></span></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="panel-foot small text-muted">
+                <i class="bi bi-database"></i> در phpMyAdmin این ویو را باز کنید: <code>SELECT * FROM <?= T_VIEW ?>;</code>
+            </div>
+        </div>
+
         <footer class="text-center text-muted small py-4">
             پنل ادمین • مانیتورینگ سالن‌های پرورش قارچ
         </footer>

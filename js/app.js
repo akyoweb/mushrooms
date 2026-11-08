@@ -102,16 +102,8 @@
         $("#updatedAt").text(faDigits(res.updatedAt));
         $("#readingsCount").text(faDigits(res.readings));
         $("#layoutBadge")
-          .text(
-            { pivot: "افقی (salon1..12)", vertical: "عمودی", legacy: "قدیمی" }[
-              res.layout
-            ] || res.layout,
-          )
-          .attr(
-            "class",
-            "badge text-bg-" +
-              (res.layout === "pivot" ? "primary" : "secondary"),
-          );
+          .text("جدول‌های متصل (saloons ↔ readings)")
+          .attr("class", "badge text-bg-primary");
         if (!silent && res.hasData) {
           // بازخوانی خاموش: پیام نمایش داده نمی‌شود
         }

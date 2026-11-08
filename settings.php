@@ -51,30 +51,7 @@ function ensure_tables(): void
     }
 }
 
-/**
- * جدول temps قدیمی (بدون تفکیک سالن) بهترین حالت برای یک خوانش جدید نیست،
- * اما دست نمی‌زنیم؛ فقط ستون زمان را در صورت نبود اضافه می‌کنیم تا تاریخچه معنادار شود.
- */
-function ensure_time_column(): void
-{
-    static $done = false;
-    if ($done) {
-        return;
-    }
-    $done = true;
 
-    try {
-        $columns = array_map(
-            static fn($row) => strtolower($row['Field']),
-            db_all('SHOW COLUMNS FROM temps')
-        );
-        if (!in_array('created_at', $columns, true)) {
-            db_run('ALTER TABLE temps ADD COLUMN `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
-        }
-    } catch (Throwable $e) {
-        error_log('ensure_time_column: ' . $e->getMessage());
-    }
-}
 
 /**
  * بازه‌های مطلوب همه سالن‌ها

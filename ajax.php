@@ -93,7 +93,7 @@ function action_snapshot(): void
 
     json_out([
         'ok' => true,
-        'layout' => temps_schema()['layout'],
+        'layout' => 'normal (saloons ↔ saloon_readings)',
         'saloons' => $views,
         'alerts' => $alerts,
         'alertsCount' => count($alerts),

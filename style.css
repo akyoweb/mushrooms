@@ -795,3 +795,64 @@ code {
         padding: 1.4rem 1.1rem 1rem;
     }
 }
+
+/* ---------- نمای دیتابیس / ساختار متصل ---------- */
+.db-view-table thead th {
+    background: #fbfdfc;
+    font-size: .74rem;
+    color: var(--muted);
+    font-weight: 700;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    font-family: "Consolas", ui-monospace, monospace;
+}
+
+.db-view-table td {
+    font-size: .84rem;
+    white-space: nowrap;
+}
+
+.schema-flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .6rem;
+}
+
+.schema-box {
+    flex: 1 1 180px;
+    background: linear-gradient(150deg, #f7fcfa, #eef6f3);
+    border: 1px solid #d6e7e1;
+    border-radius: 12px;
+    padding: .65rem .8rem;
+    text-align: center;
+    min-width: 150px;
+}
+
+.schema-box b {
+    display: block;
+    font-family: "Consolas", ui-monospace, monospace;
+    font-size: .82rem;
+    color: var(--brand-dark);
+}
+
+.schema-box span {
+    font-size: .72rem;
+    color: var(--muted);
+}
+
+.schema-arrow {
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--brand);
+    background: #fff;
+    border: 1px dashed #b9d8ce;
+    border-radius: 20px;
+    padding: .12rem .55rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+    .schema-flow { flex-direction: column; }
+    .schema-arrow { transform: rotate(90deg); }
+}

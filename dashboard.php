@@ -209,6 +209,57 @@ $fields = fields_with_ranges();
             </div>
         </div>
 
+        <!-- نمای دیتابیس: سالن‌ها وصل به دما و رطوبت -->
+        <?php $dbRows = monitor_rows(24); ?>
+        <div class="panel mt-4">
+            <div class="panel-head">
+                <h2 class="panel-title"><i class="bi bi-database-check"></i> نمای دیتابیس <code><?= T_VIEW ?></code></h2>
+                <span class="small text-muted">
+                    saloons ↔ saloon_readings ↔ readings •
+                    <a href="<?= htmlspecialchars($admin ? $adminUrl : $loginUrl) ?>">مدیریت</a>
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 db-view-table">
+                    <thead>
+                        <tr>
+                            <th>reading_id</th>
+                            <th>read_at</th>
+                            <th>saloon</th>
+                            <th>air_temp</th>
+                            <th>compost_temp</th>
+                            <th>humidity</th>
+                            <th>status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!$dbRows): ?>
+                            <tr><td colspan="7" class="text-center text-muted py-4">هنوز خوانشی ثبت نشده است.</td></tr>
+                        <?php endif; ?>
+                        <?php foreach ($dbRows as $row): ?>
+                            <tr class="<?= $row['status'] === 'OUT' ? 'table-warning-soft' : '' ?>">
+                                <td class="text-muted"><?= fa_num($row['reading_id']) ?></td>
+                                <td dir="ltr" class="text-end small"><?= htmlspecialchars((string) $row['read_at']) ?></td>
+                                <td class="fw-semibold"><?= htmlspecialchars((string) $row['saloon']) ?></td>
+                                <td><?= $row['air_temp'] === null ? '—' : fa_num((int) $row['air_temp']) ?></td>
+                                <td><?= $row['compost_temp'] === null ? '—' : fa_num((int) $row['compost_temp']) ?></td>
+                                <td><?= $row['humidity'] === null ? '—' : fa_num((int) $row['humidity']) . '٪' ?></td>
+                                <td>
+                                    <span class="badge text-bg-<?= $row['status'] === 'OK' ? 'success' : ($row['status'] === 'OUT' ? 'warning' : 'secondary') ?>">
+                                        <?= $row['status'] === 'OK' ? 'مطلوب' : ($row['status'] === 'OUT' ? 'نامطلوب' : 'بدون داده') ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel-foot small text-muted">
+                <i class="bi bi-terminal"></i>
+                ۲۴ سطر آخر ویو • برای دیدن همه: <code>SELECT * FROM <?= T_VIEW ?> ORDER BY reading_id DESC;</code>
+            </div>
+        </div>
+
         <footer class="text-center text-muted small py-4">
             مانیتورینگ سالن‌های پرورش قارچ • PHP + MySQL + jQuery + Bootstrap
         </footer>
