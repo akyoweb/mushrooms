@@ -309,8 +309,12 @@
       if (!points.length) return;
 
       var isHumidity = field === "RH";
+      var name =
+        histories[field].label ||
+        (FIELD_LABELS[field] || field) +
+          (isHumidity ? " (%)" : " (°C)");
       datasets.push({
-        label: histories[field].label + (isHumidity ? " (%)" : " (°C)"),
+        label: name,
         data: points.map(function (p) {
           return p.avg;
         }),
@@ -326,7 +330,8 @@
       });
       legend.push({
         field: field,
-        label: isHumidity ? "رطوبت نسبی" : histories[field].label,
+        label:
+          histories[field].label || FIELD_LABELS[field] || field,
         color: FIELD_COLORS[field].line,
       });
     });
@@ -336,8 +341,15 @@
 
   var FIELD_COLORS = {};
 
+  var FIELD_LABELS = {
+    air: "دمای هوا",
+    compost: "دمای کمپوست",
+    RH: "رطوبت نسبی",
+  };
+
   function initColors(fields) {
     Object.keys(fields).forEach(function (f) {
+      if (fields[f].label) FIELD_LABELS[f] = fields[f].label;
       FIELD_COLORS[f] = {
         line: fields[f].color,
         fill: fields[f].color + "22",
