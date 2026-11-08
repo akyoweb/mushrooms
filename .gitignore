@@ -1,0 +1,23 @@
+# داده‌های آپلودشده و فایل‌های موقت
+/uploads/
+/tmp/
+
+# فایل‌های تنظیمات محلی (در صورت جداکردن کانفیگ دیتابیس)
+.env
+.env.local
+config.local.php
+
+# لاگ‌ها و کش
+*.log
+*.cache
+.phpunit.result.cache
+
+# فایل‌های سیستم
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ادیتور
+.vscode/
+.idea/
+*.swp
