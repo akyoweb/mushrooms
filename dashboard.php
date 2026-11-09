@@ -10,6 +10,9 @@ $adminUrl = base_url() . 'admin.php';
 $loginUrl = base_url() . 'login.php?next=dashboard.php';
 $logoutUrl = base_url() . 'logout.php';
 $fields = fields_with_ranges();
+// بازه‌های ثبت هر نیم ساعت (آخرین اجرا و بازه جاری)
+$slotRows = reading_slots(16);
+$cronLastRun = cron_last_run_value();
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -35,7 +38,7 @@ $fields = fields_with_ranges();
                     <i class="bi bi-arrow-clockwise"></i> بازخوانی
                 </button>
                 <a href="<?= htmlspecialchars($entryUrl) ?>" class="btn btn-sm btn-outline-light">
-                    <i class="bi bi-plus-lg"></i> ثبت خوانش
+                    <i class="bi bi-bullseye"></i> دمای مطلوب
                 </a>
                 <?php if ($admin): ?>
                     <a href="<?= htmlspecialchars($adminUrl) ?>" class="btn btn-sm btn-warning fw-semibold">
@@ -61,13 +64,15 @@ $fields = fields_with_ranges();
             <div>
                 <h1 class="page-title mb-1">داشبورد مانیتورینگ</h1>
                 <p class="text-muted small mb-0">
-                    آخرین به‌روزرسانی:
-                    <span id="updatedAt" class="fw-semibold">—</span>
+                    زمان دقیق آخرین خوانش:
+                    <span id="updatedAt" class="fw-semibold" dir="ltr">—</span>
                     <span class="mx-2">|</span>
-                    ساختار داده:
-                    <span id="layoutBadge" class="badge text-bg-secondary">—</span>
+                    بازه جاری:
+                    <span id="currentPeriod" class="fw-semibold" dir="ltr">—</span>
                     <span class="mx-2">|</span>
                     تعداد خوانش‌ها: <span id="readingsCount" class="fw-semibold">0</span>
+                    <span class="mx-2">|</span>
+                    <span id="captureState" class="badge text-bg-secondary">—</span>
                 </p>
             </div>
             <div class="d-flex gap-2">
@@ -209,6 +214,55 @@ $fields = fields_with_ranges();
             </div>
         </div>
 
+        <!-- بازه‌های ثبت هر نیم ساعت -->
+        <div class="panel mt-4">
+            <div class="panel-head">
+                <h2 class="panel-title"><i class="bi bi-clock-history"></i> ثبت هر <?= fa_num(READING_INTERVAL_MINUTES) ?> دقیقه</h2>
+                <span class="small text-muted">
+                    منطقه زمانی: <code><?= htmlspecialchars(APP_TIMEZONE) ?></code>
+                    • زمان دقیق هر خوانش با میکروثانیه ذخیره می‌شود
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 db-view-table">
+                    <thead>
+                        <tr>
+                            <th>بازه</th>
+                            <th>شروع</th>
+                            <th>پایان</th>
+                            <th>زمان دقیق ثبت</th>
+                            <th>وضعیت</th>
+                        </tr>
+                    </thead>
+                    <tbody id="slotsBody">
+                        <?php foreach ($slotRows as $slot): ?>
+                            <tr class="<?= $slot['status'] === 'missing' && $slot !== $slotRows[0] ? 'table-warning-soft' : '' ?>">
+                                <td class="slot-time text-end"><?= htmlspecialchars(substr($slot['period_start'], 11, 5)) ?> – <?= htmlspecialchars(substr($slot['period_end'], 11, 5)) ?></td>
+                                <td class="slot-time text-end"><?= htmlspecialchars(substr($slot['period_start'], 0, 10)) ?></td>
+                                <td class="slot-time text-end"><?= htmlspecialchars(substr($slot['period_end'], 11, 5)) ?></td>
+                                <td class="slot-time text-end"><?= $slot['read_at'] === null ? '—' : htmlspecialchars($slot['read_at']) ?></td>
+                                <td>
+                                    <span class="badge text-bg-<?= $slot['status'] === 'ok' ? 'success' : ($slot === $slotRows[0] ? 'secondary' : 'warning') ?>">
+                                        <?= $slot['status'] === 'ok' ? 'ثبت شد' : ($slot === $slotRows[0] ? 'در انتظار' : 'بدون خوانش') ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel-foot small text-muted d-flex flex-wrap justify-content-between gap-2">
+                <span>
+                    <i class="bi bi-terminal"></i>
+                    ثبت خودکار با cron: <code>php cron.php</code> در دقیقه ۰ و ۳۰
+                    • آخرین اجرا: <span id="cronLastRun" class="slot-time"><?= $cronLastRun ? htmlspecialchars($cronLastRun) : '—' ?></span>
+                </span>
+                <span>
+                    در phpMyAdmin: <code>SELECT id, read_at, period_start FROM readings ORDER BY period_start DESC;</code>
+                </span>
+            </div>
+        </div>
+
         <!-- نمای دیتابیس: سالن‌ها وصل به دما و رطوبت -->
         <?php $dbRows = monitor_rows(24); ?>
         <div class="panel mt-4">
@@ -224,7 +278,8 @@ $fields = fields_with_ranges();
                     <thead>
                         <tr>
                             <th>reading_id</th>
-                            <th>read_at</th>
+                            <th>period_start</th>
+                            <th>read_at (دقیق)</th>
                             <th>saloon</th>
                             <th>air_temp</th>
                             <th>compost_temp</th>
@@ -234,16 +289,17 @@ $fields = fields_with_ranges();
                     </thead>
                     <tbody>
                         <?php if (!$dbRows): ?>
-                            <tr><td colspan="7" class="text-center text-muted py-4">هنوز خوانشی ثبت نشده است.</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted py-4">هنوز خوانشی ثبت نشده است.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($dbRows as $row): ?>
                             <tr class="<?= $row['status'] === 'OUT' ? 'table-warning-soft' : '' ?>">
                                 <td class="text-muted"><?= fa_num($row['reading_id']) ?></td>
+                                <td dir="ltr" class="text-end small"><?= htmlspecialchars((string) $row['period_start']) ?></td>
                                 <td dir="ltr" class="text-end small"><?= htmlspecialchars((string) $row['read_at']) ?></td>
                                 <td class="fw-semibold"><?= htmlspecialchars((string) $row['saloon']) ?></td>
-                                <td><?= $row['air_temp'] === null ? '—' : fa_num((int) $row['air_temp']) ?></td>
-                                <td><?= $row['compost_temp'] === null ? '—' : fa_num((int) $row['compost_temp']) ?></td>
-                                <td><?= $row['humidity'] === null ? '—' : fa_num((int) $row['humidity']) . '٪' ?></td>
+                                <td><?= $row['air_temp'] === null ? '—' : fa_num($row['air_temp']) ?></td>
+                                <td><?= $row['compost_temp'] === null ? '—' : fa_num($row['compost_temp']) ?></td>
+                                <td><?= $row['humidity'] === null ? '—' : fa_num($row['humidity']) . '٪' ?></td>
                                 <td>
                                     <span class="badge text-bg-<?= $row['status'] === 'OK' ? 'success' : ($row['status'] === 'OUT' ? 'warning' : 'secondary') ?>">
                                         <?= $row['status'] === 'OK' ? 'مطلوب' : ($row['status'] === 'OUT' ? 'نامطلوب' : 'بدون داده') ?>
@@ -274,6 +330,7 @@ $fields = fields_with_ranges();
         window.APP = {
             apiUrl: <?= json_encode(base_url() . 'ajax.php') ?>,
             saloons: <?= (int) $saloons ?>,
+            interval: <?= (int) READING_INTERVAL_MINUTES ?>,
             fields: <?= json_encode($fields, JSON_UNESCAPED_UNICODE) ?>
         };
     </script>

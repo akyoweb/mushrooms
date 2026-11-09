@@ -487,6 +487,21 @@ body {
   color: #b3263a;
 }
 
+.range-readonly {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.range-readonly .badge {
+  font-size: 0.68rem;
+}
+
 .btn-brand {
   background: var(--brand);
   border-color: var(--brand);
@@ -810,6 +825,13 @@ code {
 .db-view-table td {
     font-size: .84rem;
     white-space: nowrap;
+}
+
+/* زمان دقیق (با میکروثانیه) — چپ‌به‌راست تا ارقام درست مرتب شوند */
+.slot-time {
+    direction: ltr;
+    unicode-bidi: plaintext;
+    font-variant-numeric: tabular-nums;
 }
 
 .schema-flow {

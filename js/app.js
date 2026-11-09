@@ -7,6 +7,12 @@
 
   var API = window.APP.apiUrl;
   var POLL_INTERVAL = 30000; // بازخوانی خودکار هر ۳۰ ثانیه
+  var CAPTURE_LABELS = {
+    stored: "خوانش بازه ثبت شد",
+    already: "بازه جاری ثبت شده",
+    "no-sensor": "دماسنج وصل نشده",
+    skipped: "بازه رد شد",
+  };
   var FIELD_ORDER = ["air", "compost", "RH"];
   var state = {
     data: null,
@@ -99,8 +105,31 @@
         renderTable(res);
         renderAlerts(res);
         renderChart(res.histories);
-        $("#updatedAt").text(faDigits(res.updatedAt));
+        renderSlots(res.slots || [], res);
+
+        // زمان دقیق آخرین خوانش و بازه جاری (زمان سرور، نه زمان مرورگر)
+        $("#updatedAt").text(res.updatedAt ? faDigits(res.updatedAt) : "—").attr("class", "fw-semibold slot-time");
+        $("#currentPeriod").text(
+          faDigits(res.currentPeriod || "—") +
+            " → " +
+            faDigits(String(res.periodEnd || "").slice(11, 16)),
+        );
         $("#readingsCount").text(faDigits(res.readings));
+        $("#cronLastRun").text(res.cronLog ? faDigits(res.cronLog) : "—");
+
+        var action = (res.capture && res.capture.action) || "skipped";
+        $("#captureState")
+          .text(CAPTURE_LABELS[action] || action)
+          .attr(
+            "class",
+            "badge text-bg-" +
+              (action === "stored" || action === "already"
+                ? "success"
+                : action === "no-sensor"
+                  ? "secondary"
+                  : "warning"),
+          )
+          .attr("title", "هر " + faDigits(window.APP.interval) + " دقیقه — cron.php");
         $("#layoutBadge")
           .text("جدول‌های متصل (saloons ↔ readings)")
           .attr("class", "badge text-bg-primary");
@@ -294,6 +323,51 @@
     $("#alertsList").html(html + more);
   }
 
+  /** جدول بازه‌های ثبت هر نیم ساعت */
+  function renderSlots(slots, res) {
+    if (!slots.length) {
+      $("#slotsBody").html(
+        '<tr><td colspan="5" class="text-center text-muted py-3">داده‌ای برای نمایش نیست.</td></tr>',
+      );
+      return;
+    }
+
+    var html = slots
+      .map(function (slot, index) {
+        var pending = index === 0 && slot.status !== "ok";
+        var tone = slot.status === "ok" ? "success" : pending ? "secondary" : "warning";
+        var text = slot.status === "ok" ? "ثبت شد" : pending ? "در انتظار" : "بدون خوانش";
+        return (
+          '<tr class="' +
+          (slot.status !== "ok" && !pending ? "table-warning-soft" : "") +
+          ">" +
+          '<td class="slot-time text-end">' +
+          faDigits(slot.period_start.slice(11, 16)) +
+          " – " +
+          faDigits(slot.period_end.slice(11, 16)) +
+          "</td>" +
+          '<td class="slot-time text-end">' +
+          faDigits(slot.period_start.slice(0, 10)) +
+          "</td>" +
+          '<td class="slot-time text-end">' +
+          faDigits(slot.period_end.slice(11, 16)) +
+          "</td>" +
+          '<td class="slot-time text-end">' +
+          (slot.read_at ? faDigits(slot.read_at) : "—") +
+          "</td>" +
+          '<td><span class="badge text-bg-' +
+          tone +
+          '">' +
+          text +
+          "</span></td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+
+    $("#slotsBody").html(html);
+  }
+
   /* ------------------------------------------------------------------ */
   /* نمودار                                                             */
   /* ------------------------------------------------------------------ */
@@ -362,13 +436,29 @@
     var built = buildDatasets(histories, state.chartField);
     state.chart.data.datasets = built.datasets;
 
-    var maxLen = 0;
+    // برچسب محور افقی: زمان دقیق ثبت هر خوانش (مثل 10:30:07)
+    var times = [];
     Object.keys(histories).forEach(function (f) {
-      maxLen = Math.max(maxLen, (histories[f] || []).length);
+      (histories[f] || []).forEach(function (p) {
+        if (p.t && times.indexOf(p.t) === -1) times.push(p.t);
+      });
     });
-    state.chart.data.labels = [];
-    for (var i = 1; i <= maxLen; i++) {
-      state.chart.data.labels.push("#" + faDigits(i));
+    times.sort();
+    var maxLen = Math.max.apply(
+      null,
+      [0].concat(
+        Object.keys(histories).map(function (f) {
+          return (histories[f] || []).length;
+        }),
+      ),
+    );
+    state.chart.data.labels = times.length
+      ? times.map(function (t) {
+          return faDigits(String(t).slice(11, 16));
+        })
+      : [];
+    if (!times.length && maxLen) {
+      for (var i = 1; i <= maxLen; i++) state.chart.data.labels.push("#" + faDigits(i));
     }
     state.chart.update();
 
@@ -423,6 +513,7 @@
         scales: {
           x: {
             grid: { color: "rgba(0,0,0,.04)" },
+            title: { display: true, text: "زمان خوانش", color: "#6c757d" },
             ticks: {
               color: "#6c757d",
               maxRotation: 0,

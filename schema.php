@@ -123,15 +123,22 @@ function schema_ensure(): array
         }
 
         // ---------- ۲) جدول نوبت‌های خوانش ----------
+        // read_at      : زمان دقیق ثبت (با میکروثانیه، مثل 2026-11-09 10:30:00.123456)
+        // period_start : شروع بازه نیم‌ساعتی؛ یکتا بودن آن جلوی ثبت دوباره در همان بازه را می‌گیرد
         if (!table_exists(T_READINGS)) {
             db_run(
                 'CREATE TABLE `' . T_READINGS . '` (
                     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    `read_at` DATETIME NOT NULL,
+                    `read_at` DATETIME(6) NOT NULL,
+                    `period_start` DATETIME NOT NULL,
+                    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (`id`),
+                    UNIQUE KEY `uniq_period_start` (`period_start`),
                     KEY `idx_read_at` (`read_at`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
             );
+        } else {
+            schema_upgrade_readings();
         }
 
         // ---------- ۳) جدول دما/رطوبت هر سالن (کلید خارجی) ----------
@@ -141,9 +148,9 @@ function schema_ensure(): array
                     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                     `reading_id` INT UNSIGNED NOT NULL,
                     `saloon_id` TINYINT UNSIGNED NOT NULL,
-                    `air` SMALLINT NULL,
-                    `compost` SMALLINT NULL,
-                    `RH` TINYINT UNSIGNED NULL,
+                    `air` DECIMAL(5,1) NULL,
+                    `compost` DECIMAL(5,1) NULL,
+                    `RH` DECIMAL(5,1) NULL,
                     PRIMARY KEY (`id`),
                     UNIQUE KEY `uniq_reading_saloon` (`reading_id`, `saloon_id`),
                     KEY `idx_saloon` (`saloon_id`),
@@ -153,6 +160,8 @@ function schema_ensure(): array
                         REFERENCES `' . T_SALOONS . '` (`id`) ON DELETE RESTRICT
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
             );
+        } else {
+            schema_upgrade_values();
         }
 
         // ---------- ۴) پر کردن سالن‌ها ----------
@@ -169,13 +178,14 @@ function schema_ensure(): array
         // ---------- ۵) انتقال داده‌های قدیمی temps → ساختار جدید ----------
         $migrated = schema_migrate_legacy();
 
-        // ---------- ۶) ویو آماده برای مشاهده در phpMyAdmin ----------
+        // ---------- ۶) ویوم آماده برای مشاهده در phpMyAdmin ----------
         db_run('DROP VIEW IF EXISTS `' . T_VIEW . '`');
         db_run(
             'CREATE VIEW `' . T_VIEW . '` AS
              SELECT
                 r.`id`          AS `reading_id`,
                 r.`read_at`     AS `read_at`,
+                r.`period_start` AS `period_start`,
                 s.`id`          AS `saloon_id`,
                 s.`name`        AS `saloon`,
                 d.`air`         AS `air_temp`,
@@ -183,10 +193,7 @@ function schema_ensure(): array
                 d.`RH`          AS `humidity`,
                 CASE
                 WHEN d.`air` IS NULL AND d.`compost` IS NULL AND d.`RH` IS NULL THEN \'no data\'
-                WHEN d.`air` BETWEEN 15 AND 18
-                     AND d.`compost` BETWEEN 16 AND 20
-                     AND d.`RH` BETWEEN 85 AND 95 THEN \'OK\'
-                ELSE \'OUT\'
+                ELSE \'OK\'
                 END             AS `status`
              FROM `' . T_SALOON_D . '` d
              JOIN `' . T_SALOONS . '` s ON s.`id` = d.`saloon_id`
@@ -202,6 +209,96 @@ function schema_ensure(): array
         'migrated' => $migrated,
         'note' => $note,
     ];
+}
+
+/**
+ * ارتقای جدول readings: دقت میکروثانیه + ستون period_start + ایندکس یکتا
+ * روی جدول قدیمی، read_at فقط به ثانیه بود و امکان جلوگیری از تکرار بازه وجود نداشت
+ */
+function schema_upgrade_readings(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    $columns = array_flip(table_columns(T_READINGS));
+
+    if (($columns['read_at'] ?? '') === 'datetime') {
+        db_run('ALTER TABLE `' . T_READINGS . '` MODIFY `read_at` DATETIME(6) NOT NULL');
+        $columns['read_at'] = 'datetime(6)';
+    }
+
+    if (!isset($columns['period_start'])) {
+        db_run('ALTER TABLE `' . T_READINGS . '` ADD COLUMN `period_start` DATETIME NULL AFTER `read_at`');
+        $columns['period_start'] = 0;
+        // برای داده‌های قبلی، شروع بازه نیم‌ساعتی همان زمان خوانش محاسبه می‌شود
+        db_run(
+            'UPDATE `' . T_READINGS . '` SET `period_start` = DATE_SUB(DATE_FORMAT(`read_at`, \'%Y-%m-%d %H:%i:00\'),'
+            . ' INTERVAL (MINUTE(`read_at`) % ' . (int) READING_INTERVAL_MINUTES . ') MINUTE) WHERE `period_start` IS NULL'
+        );
+        db_run('UPDATE `' . T_READINGS . '` SET `period_start` = `read_at` WHERE `period_start` IS NULL');
+
+        // ردیف‌های تکراری در یک بازه (از ثبت‌های دستی قبلی) ادغام می‌شوند؛ آخرین ردیف می‌ماند
+        foreach (db_all(
+            'SELECT `period_start` FROM `' . T_READINGS . '` GROUP BY `period_start` HAVING COUNT(*) > 1'
+        ) as $dup) {
+            $keepId = (int) db_all(
+                'SELECT `id` FROM `' . T_READINGS . '` WHERE `period_start` = ? ORDER BY `id` DESC LIMIT 1',
+                [$dup['period_start']],
+                's'
+            )[0]['id'];
+            db_run(
+                'DELETE FROM `' . T_READINGS . '` WHERE `period_start` = ? AND `id` <> ?',
+                [$dup['period_start'], $keepId],
+                'si'
+            );
+        }
+
+        db_run('ALTER TABLE `' . T_READINGS . '` MODIFY `period_start` DATETIME NOT NULL');
+    }
+
+    // تابع اطلاعاتی: آیا ایندکس یکتا وجود دارد؟
+    $indexes = db_all(
+        'SELECT `INDEX_NAME`, `NON_UNIQUE` FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? ORDER BY `SEQ_IN_INDEX`',
+        [T_READINGS, 'period_start'],
+        'ss'
+    );
+    $hasUnique = false;
+    foreach ($indexes as $idx) {
+        if ((int) $idx['NON_UNIQUE'] === 0) {
+            $hasUnique = true;
+        }
+    }
+    if (!$hasUnique) {
+        db_run('ALTER TABLE `' . T_READINGS . '` ADD UNIQUE KEY `uniq_period_start` (`period_start`)');
+    }
+
+    if (!isset($columns['created_at'])) {
+        db_run('ALTER TABLE `' . T_READINGS . '` ADD COLUMN `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
+    }
+}
+
+/** مقدار دما/رطوبت اعشاری ذخیره می‌شود (دقت بیشتر دماسنج‌ها) و این‌جا ستون‌ها ارتقا می‌یابند */
+function schema_upgrade_values(): void
+{
+    $columns = db_all('SHOW COLUMNS FROM `' . T_SALOON_D . '`');
+    foreach ($columns as $column) {
+        if (!in_array($column['Field'], ['air', 'compost', 'RH'], true)) {
+            continue;
+        }
+        if (stripos((string) $column['Type'], 'decimal') === 0) {
+            continue;
+        }
+        try {
+            db_run('ALTER TABLE `' . T_SALOON_D . '` MODIFY `' . $column['Field'] . '` DECIMAL(5,1) NULL');
+        } catch (Throwable $e) {
+            // اگر مقادیر فعلی با DECIMAL سازگار نبودند، نوع قبلی حفظ می‌شود
+            error_log('schema_upgrade_values: ' . $e->getMessage());
+        }
+    }
 }
 
 /**
@@ -231,6 +328,8 @@ function schema_migrate_legacy(): int
         return 0;
     }
 
+    // داده قدیمی با زمان خودش منتقل می‌شود؛ اگر در همان بازه نیم‌ساعتی چند سطر باشد،
+    // سطرهای بعدی (به دلیل یکتا بودن period_start) پردازش نمی‌شوند
     $hasNumbered = !empty(array_filter($legacy, static fn($c) => preg_match('/^[a-z]+(\d+)$/', $c)));
     $count = 0;
 
@@ -238,7 +337,17 @@ function schema_migrate_legacy(): int
         $time = $row['created_at'] ?? $row['read_at'] ?? $row['read_time'] ?? null;
         $time = $time ?: date('Y-m-d H:i:s');
 
-        db_run('INSERT INTO `' . T_READINGS . '` (`read_at`) VALUES (?)', [$time], 's');
+        $period = period_start(strtotime($time));
+        $taken = db_all('SELECT `id` FROM `' . T_READINGS . '` WHERE `period_start` = ?', [$period], 's');
+        if ($taken) {
+            continue;
+        }
+
+        db_run(
+            'INSERT INTO `' . T_READINGS . '` (`read_at`, `period_start`) VALUES (?, ?)',
+            [$time, $period],
+            'ss'
+        );
         $readingId = (int) db()->insert_id;
 
         for ($i = 1; $i <= SALOON_COUNT; $i++) {
@@ -307,7 +416,7 @@ function saloon_label(int $saloon): string
  */
 function last_reading(): ?array
 {
-    $rows = db_all('SELECT `id`, `read_at` FROM `' . T_READINGS . '` ORDER BY `id` DESC LIMIT 1');
+    $rows = db_all('SELECT `id`, `read_at` FROM `' . T_READINGS . '` ORDER BY `read_at` DESC LIMIT 1');
     if (!$rows) {
         return null;
     }
@@ -323,7 +432,7 @@ function reading_detail(int $readingId): ?array
     }
 
     $details = db_all(
-        'SELECT `saloon_id`, `air`, `compost`, `RH` FROM `' . T_SALOON_D . '` WHERE `reading_id` = ?',
+        'SELECT `saloon_id`, `air`, `compost`, `RH` FROM `' . T_SALOON_D . '` WHERE `reading_id` = ? ORDER BY `saloon_id` ASC',
         [$readingId],
         'i'
     );
@@ -331,9 +440,9 @@ function reading_detail(int $readingId): ?array
     $rows = [];
     foreach ($details as $d) {
         $rows[(int) $d['saloon_id']] = [
-            'air' => $d['air'] === null ? null : (int) $d['air'],
-            'compost' => $d['compost'] === null ? null : (int) $d['compost'],
-            'RH' => $d['RH'] === null ? null : (int) $d['RH'],
+            'air' => $d['air'] === null ? null : (float) $d['air'],
+            'compost' => $d['compost'] === null ? null : (float) $d['compost'],
+            'RH' => $d['RH'] === null ? null : (float) $d['RH'],
         ];
     }
 
@@ -351,20 +460,26 @@ function reading_detail(int $readingId): ?array
 function monitor_rows(int $limit = 50): array
 {
     $limit = max(1, min(5000, $limit));
-    return db_all('SELECT * FROM `' . T_VIEW . '` ORDER BY `reading_id` DESC, `saloon_id` ASC LIMIT ' . $limit);
+    return db_all('SELECT * FROM `' . T_VIEW . '` ORDER BY `read_at` DESC, `saloon_id` ASC LIMIT ' . $limit);
 }
 
 /**
  * ثبت یک نوبت خوانش جدید
  * @param array $rows [saloonId => ['air'=>, 'compost'=>, 'RH'=>]]
- * @param string|null $readAt
+ * @param string|null $readAt زمان دقیق ثبت؛ اگر خالی باشد زمان جاری با میکروثانیه
+ * @param string|null $periodStart شروع بازه نیم‌ساعتی؛ اگر خالی باشد از readAt محاسبه می‌شود
  * @return int شناسه نوبت خوانش
  */
-function insert_reading(array $rows, ?string $readAt = null): int
+function insert_reading(array $rows, ?string $readAt = null, ?string $periodStart = null): int
 {
-    $readAt = $readAt ?: date('Y-m-d H:i:s');
+    $readAt = $readAt ?: now_micro();
+    $periodStart = $periodStart ?: period_start(strtotime($readAt));
 
-    db_run('INSERT INTO `' . T_READINGS . '` (`read_at`) VALUES (?)', [$readAt], 's');
+    db_run(
+        'INSERT INTO `' . T_READINGS . '` (`read_at`, `period_start`) VALUES (?, ?)',
+        [$readAt, $periodStart],
+        'ss'
+    );
     $readingId = (int) db()->insert_id;
 
     $values = [];
@@ -381,6 +496,7 @@ function insert_reading(array $rows, ?string $readAt = null): int
     }
 
     if ($values) {
+        // مقدار NULL یعنی آن سالن در این نوبت خوانشی نداشته است
         db_run(
             'INSERT INTO `' . T_SALOON_D . '` (`reading_id`, `saloon_id`, `air`, `compost`, `RH`) VALUES ' . implode(',', $values),
             $params,

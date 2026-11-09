@@ -3,10 +3,11 @@
  * API مانیتورینگ (JSON)
  * همه درخواست‌های صفحه داشبورد از اینجا می‌گذرند.
  *
- * action = snapshot   : وضعیت جاری همه سالن‌ها + آمار
+ * action = snapshot   : وضعیت جاری همه سالن‌ها + آمار + بازه‌های نیم‌ساعتی
  * action = history    : سری زمانی یک فیلد (برای نمودار)
- * action = save       : ثبت خوانش جدید
+ * action = save       : ثبت خوانش بازه جاری
  * action = simulate   : ساخت داده تستی (فقط برای آزمایش)
+ * action = capture    : ثبت خودکار خوانش بازه جاری (همان کار cron)
  */
 
 require_once __DIR__ . '/monitor.php';
@@ -24,6 +25,9 @@ try {
         case 'simulate':
             action_simulate();
             break;
+        case 'capture':
+            action_capture();
+            break;
         case 'snapshot':
         default:
             action_snapshot();
@@ -39,6 +43,8 @@ try {
 function action_snapshot(): void
 {
     $saloons = SALOONS;
+    // اگر cron تنظیم نشده باشد، بازه‌ای که خوانش ندارد در اولین بازدید ثبت می‌شود
+    $capture = auto_capture(null, true);
     $snapshot = latest_snapshot();
     $latest = $snapshot['latest'];
 
@@ -83,13 +89,16 @@ function action_snapshot(): void
         $views[] = $card;
     }
 
-    // تاریخ آخرین به‌روزرسانی؛ دیتابیس فعلی ستون زمان ندارد، پس زمان دریافت سرور
-    $updatedAt = date('Y-m-d H:i:s');
+    // زمان دقیق آخرین خوانش ثبت‌شده (نه زمان درخواست)
+    $updatedAt = $latest['t'] ?? null;
+    $serverNow = now_micro();
 
     $histories = [];
     foreach (array_keys(FIELDS) as $field) {
         $histories[$field] = build_history($field, 30);
     }
+
+    $slots = reading_slots(16);
 
     json_out([
         'ok' => true,
@@ -103,6 +112,18 @@ function action_snapshot(): void
         'readings' => $snapshot['count'],
         'hasData' => $latest !== null,
         'updatedAt' => $updatedAt,
+        'serverNow' => $serverNow,
+        'interval' => READING_INTERVAL_MINUTES,
+        'currentPeriod' => period_start(),
+        'periodEnd' => period_end(),
+        'capture' => [
+            'action' => $capture['action'],
+            'readAt' => $capture['read_at'],
+            'sensor' => sensor_source(),
+        ],
+        'slots' => $slots,
+        'cronLog' => cron_last_run_value(),
+        'timezone' => APP_TIMEZONE,
         'fields' => FIELDS,
         'ranges' => good_ranges(),
         'fieldsWithRanges' => fields_with_ranges(),
@@ -110,6 +131,8 @@ function action_snapshot(): void
         'histories' => $histories,
     ]);
 }
+
+
 
 /**
  * سری زمانی یک فیلد: برای هر خوانش میانگین/کمینه/بیشینه ۱۲ سالن
@@ -125,6 +148,7 @@ function build_history(string $field, int $limit = 30): array
         }
         $points[] = [
             'rid' => $r['rid'],
+            't' => $r['t'],
             'avg' => round(array_sum($values) / count($values), 1),
             'min' => min($values),
             'max' => max($values),
@@ -184,7 +208,34 @@ function action_save(): void
         json_out(['ok' => false, 'error' => $result['error']], 422);
     }
 
-    json_out(['ok' => true, 'message' => 'خوانش جدید با موفقیت ثبت شد.']);
+    json_out([
+        'ok' => true,
+        'message' => !empty($result['updated'])
+            ? 'خوانش بازه جاری به‌روزرسانی شد (هر بازه نیم‌ساعتی یک رکورد دارد).'
+            : 'خوانش جدید با موفقیت ثبت شد.',
+        'reading_id' => $result['reading_id'],
+        'updated' => !empty($result['updated']),
+    ]);
+}
+
+/** ثبت خودکار خوانش بازه جاری از دماسنج‌ها (همان کاری که cron انجام می‌دهد) */
+function action_capture(): void
+{
+    $result = auto_capture(null, true);
+    $messages = [
+        'stored' => 'خوانش بازه جاری ثبت شد.',
+        'already' => 'خوانش این بازه قبلاً ثبت شده است.',
+        'no-sensor' => 'هیچ جدول دماسنجی پیدا نشد؛ ابتدا دماسنج‌ها را وصل کنید.',
+        'skipped' => 'این بازه رد شد.',
+    ];
+
+    json_out([
+        'ok' => $result['action'] !== 'skipped',
+        'message' => $messages[$result['action']] ?? $result['action'],
+        'result' => $result,
+        'sensor' => sensor_source(),
+        'interval' => READING_INTERVAL_MINUTES,
+    ]);
 }
 
 /**
@@ -196,6 +247,10 @@ function action_simulate(): void
     $saloons = (int) ($_REQUEST['saloons'] ?? SALOONS);
     $saloons = max(1, min(SALOONS, $saloons));
     $data = [];
+    $decimals = [];
+    foreach (FIELDS as $field => $meta) {
+        $decimals[$field] = (int) ($meta['decimals'] ?? 0);
+    }
 
     foreach (FIELDS as $field => $meta) {
         $data[$field] = [];
@@ -206,12 +261,12 @@ function action_simulate(): void
             if (mt_rand(1, 100) <= 8) {
                 $deviation += (mt_rand(0, 1) ? 1 : -1) * $meta['step'] * 6;
             }
-            $value = (int) round($center + $deviation);
+            $value = round($center + $deviation, $decimals[$field]);
             // سالن‌های ارسال‌نشده با میانگین پر می‌شوند تا بازه‌ها ۱۲ تایی بماند
             $data[$field][$i] = $value;
         }
         for ($i = $saloons; $i < SALOONS; $i++) {
-            $data[$field][$i] = (int) round($center);
+            $data[$field][$i] = round($center, $decimals[$field]);
         }
     }
 
@@ -220,5 +275,10 @@ function action_simulate(): void
         json_out(['ok' => false, 'error' => $result['error']], 422);
     }
 
-    json_out(['ok' => true, 'message' => 'یک خوانش شبیه‌سازی‌شده ثبت شد.']);
+    json_out([
+        'ok' => true,
+        'message' => !empty($result['updated'])
+            ? 'خوانش تستی بازه جاری جای‌گزین شد (هر بازه یک رکورد دارد).'
+            : 'یک خوانش شبیه‌سازی‌شده ثبت شد.',
+    ]);
 }

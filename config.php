@@ -10,6 +10,11 @@
 
 require_once __DIR__ . '/database.php';
 
+/** منطقه زمانی؛ زمان دقیق خوانش‌ها با همین منطقه ذخیره می‌شود */
+const APP_TIMEZONE = 'Asia/Tehran';
+
+date_default_timezone_set(APP_TIMEZONE);
+
 /** مجموع تعداد سالن‌ها */
 define('SALOONS', SALOON_COUNT);
 
@@ -30,8 +35,9 @@ require_once __DIR__ . '/schema.php';
  *  - good   : بازه مطلوب هر فیلد
  *  - step   : عدد برای شبیه‌ساز
  *  - color  : رنگ نمودار
+ *  - decimals: تعداد رقم اعشار (0 = عدد صحیح، 1 = یک رقم اعشار)
  */
-const FIELDS = [
+define('FIELDS_BASE', [
     // آرایه برگشتی تابع fields() با رنگ/واحد و بازه مطلوب سالن‌ها ترکیب می‌شود
     'air' => [
         'label' => 'دمای هوا',
@@ -42,16 +48,18 @@ const FIELDS = [
         'step'  => 0.35,
         'base'  => 16.4,
         'color' => '#1f8a70',
+        'decimals' => 1,
     ],
     'compost' => [
         'label' => 'دمای کمپوست',
         'unit'  => '°C',
-        'min'   => -10,
-        'max'   => 90,
+        'min'   => 18,
+        'max'   => 21,
         'good'  => [16, 20],
         'step'  => 0.45,
         'base'  => 17.8,
         'color' => '#e26a2c',
+        'decimals' => 1,
     ],
     'RH' => [
         'label' => 'رطوبت نسبی',
@@ -62,8 +70,64 @@ const FIELDS = [
         'step'  => 1.6,
         'base'  => 90,
         'color' => '#2d6cdf',
+        'decimals' => 0,
     ],
-];
+]);
+
+/**
+ * FIELDS با define ساخته می‌شود تا در هر جای کد در دسترس باشد
+ * (در PHP 7.4 آرایه ثابت مجاز نیست و order مهم است)
+ */
+define('FIELDS', FIELDS_BASE);
+
+/* ------------------------------------------------------------------ */
+/* ثبت خودکار هر نیم ساعت                                             */
+/* ------------------------------------------------------------------ */
+
+/** بازه ثبت خودکار خوانش در دیتابیس (دقیقه) — هر ۳۰ دقیقه */
+const READING_INTERVAL_MINUTES = 30;
+
+/**
+ * نام جدول دماسنج‌ها؛ اگر خالی باشد اولین جدول/ویوی که ستون saloon و air دارد پیدا می‌شود.
+ * ساختار مورد انتظار: saloon_id, air, compost, RH, read_at
+ */
+const SENSOR_TABLE = '';
+
+/**
+ * شروع بازه جاری (مثلاً 10:00 یا 10:30)
+ * کلید یکتای هر نوبت در جدول readings همین مقدار است
+ */
+function period_start(?int $timestamp = null): string
+{
+    $timestamp = $timestamp ?? time();
+    $seconds = READING_INTERVAL_MINUTES * 60;
+    return date('Y-m-d H:i:s', intdiv($timestamp, $seconds) * $seconds);
+}
+
+/** پایان بازه جاری (شروع بازه بعدی) */
+function period_end(?int $timestamp = null): string
+{
+    return date('Y-m-d H:i:s', strtotime(period_start($timestamp)) + READING_INTERVAL_MINUTES * 60);
+}
+
+/** زمان دقیق جاری با میکروثانیه برای ذخیره‌سازی */
+function now_micro(): string
+{
+    return (new DateTimeImmutable('now'))->format('Y-m-d H:i:s.u');
+}
+
+/** نمایش زمان دقیق برای کاربر (میکروثانیه به سادگی حذف می‌شود) */
+function fa_time(?string $value, bool $withDate = true): string
+{
+    if ($value === null || $value === '') {
+        return '—';
+    }
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return (string) $value;
+    }
+    return fa_num(date($withDate ? 'Y-m-d H:i:s' : 'H:i', $ts));
+}
 
 /**
  * ساختار فعلی جدول temps به صورت افقی است:

@@ -29,14 +29,23 @@ function db(): mysqli
     return $db;
 }
 
-/** اجرای کوئری و برگرداندن همه سطرها */
-function db_all(string $sql, array $params = [], string $types = ''): array
+/** اجرای کوئری آماده‌شده و برگرداندن نتیجه (اجرای بدون bind برای پارامترها) */
+function db_stmt(string $sql, array $params = []): mysqli_stmt
 {
     $stmt = db()->prepare($sql);
     if ($params) {
-        $stmt->bind_param($types, ...$params);
+        // همه پارامترها به رشته بایند می‌شوند؛ MySQL خودش تبدیل نوع می‌کند
+        $values = array_map(static fn($v) => $v === null ? null : (string) $v, $params);
+        $stmt->bind_param(str_repeat('s', count($values)), ...$values);
     }
     $stmt->execute();
+    return $stmt;
+}
+
+/** اجرای کوئری و برگرداندن همه سطرها */
+function db_all(string $sql, array $params = [], string $types = ''): array
+{
+    $stmt = db_stmt($sql, $params);
     $result = $stmt->get_result();
     $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
     $stmt->close();
@@ -46,18 +55,14 @@ function db_all(string $sql, array $params = [], string $types = ''): array
 /** اجرای کوئری (INSERT/UPDATE) و برگرداندن تعداد سطرهای تأثیرگرفته */
 function db_run(string $sql, array $params = [], string $types = ''): int
 {
-    $stmt = db()->prepare($sql);
-    if ($params) {
-        $stmt->bind_param($types, ...$params);
-    }
-    $stmt->execute();
+    $stmt = db_stmt($sql, $params);
     $affected = $stmt->affected_rows;
     $stmt->close();
     return $affected;
 }
 
-/** فیلدهای POST را عددی/صفر می‌کند و بازه مجاز را اعمال می‌کند */
-function clean_number($value, float $min, float $max): ?int
+/** فیلدهای POST را عددی می‌کند و بازه مجاز را اعمال می‌کند (با یک رقم اعشار) */
+function clean_number($value, float $min, float $max): ?float
 {
     if ($value === null || $value === '') {
         return null;
@@ -65,6 +70,6 @@ function clean_number($value, float $min, float $max): ?int
     if (!is_numeric($value)) {
         return null;
     }
-    $number = (int) round((float) $value);
-    return max((int) $min, min((int) $max, $number));
+    $number = round((float) $value, 1);
+    return max($min, min($max, $number));
 }

@@ -7,13 +7,21 @@ $dashboardUrl = base_url() . 'dashboard.php';
 $admin = auth_check() ? auth_user() : null;
 $adminUrl = base_url() . 'admin.php';
 $loginUrl = base_url() . 'login.php?next=admin.php';
+
+// بازه مطلوب هر فیلد برای هر سالن (از پنل ادمین)
+$ranges = [];
+foreach (array_keys(FIELDS) as $field) {
+    for ($i = 1; $i <= $saloons; $i++) {
+        $ranges[$field][$i] = saloon_range($field, $i);
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ثبت خوانش دمای سالن‌ها</title>
+    <title>دمای مطلوب سالن‌ها</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="style.css" />
@@ -22,8 +30,8 @@ $loginUrl = base_url() . 'login.php?next=admin.php';
     <nav class="navbar app-navbar">
         <div class="container-fluid px-lg-4">
             <a class="navbar-brand d-flex align-items-center gap-2" href="index.php">
-                <span class="brand-icon"><i class="bi bi-pencil-square"></i></span>
-                <span>ثبت خوانش سالن‌ها</span>
+                <span class="brand-icon"><i class="bi bi-bullseye"></i></span>
+                <span>دمای مطلوب سالن‌ها</span>
             </a>
             <div class="d-flex align-items-center gap-2 ms-auto">
                 <a href="<?= htmlspecialchars($dashboardUrl) ?>" class="btn btn-sm btn-light">
@@ -45,128 +53,104 @@ $loginUrl = base_url() . 'login.php?next=admin.php';
     <main class="container-fluid px-lg-4 py-4">
         <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
             <div>
-                <h1 class="page-title mb-1">ثبت خوانش جدید</h1>
+                <h1 class="page-title mb-1">دمای مطلوب هر <?= fa_num($saloons) ?> سالن</h1>
                 <p class="text-muted small mb-0">
-                    برای هر <?= fa_num($saloons) ?> سالن، دماها و رطوبت را وارد کنید. یک سطر در جدول <code>temps</code> ثبت می‌شود.
+                    این صفحه فقط برای دیدن و تعیین محدوده مطلوب است. مقادیر واقعی دما به‌صورت خودکار از دماسنج‌ها
+                    دریافت می‌شود و نیازی به وارد کردن دستی نیست.
                 </p>
             </div>
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="demoToggle" />
-                <label class="form-check-label small" for="demoToggle">پر کردن با مقادیر نمونه</label>
-            </div>
+            <?php if ($admin): ?>
+                <a href="<?= htmlspecialchars($adminUrl) ?>" class="btn btn-sm btn-brand">
+                    <i class="bi bi-pencil-square"></i> ویرایش در پنل ادمین
+                </a>
+            <?php endif; ?>
         </div>
 
-        <form id="readingForm" novalidate autocomplete="off">
-            <div class="panel mb-4">
-                <div class="panel-head">
-                    <h2 class="panel-title"><i class="bi bi-sliders"></i> مقدار سریع برای همه سالن‌ها</h2>
-                    <span class="small text-muted">ابتدا حجم کلی را وارد کنید، سپس در صورت نیاز هر سالن را اصلاح کنید.</span>
-                </div>
-                <div class="panel-body">
-                    <div class="row g-3" id="bulkRow">
-                        <?php foreach (FIELDS as $field => $meta): ?>
-                            <div class="col-12 col-md-4">
-                                <label class="form-label small fw-semibold">
-                                    <?= htmlspecialchars($meta['label']) ?> (<?= htmlspecialchars($meta['unit']) ?>)
-                                    <span class="text-muted fw-normal">مطلوب: <?= fa_num($meta['good'][0]) ?>–<?= fa_num($meta['good'][1]) ?></span>
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control bulk-input" data-field="<?= htmlspecialchars($field) ?>"
-                                           min="<?= (int) $meta['min'] ?>" max="<?= (int) $meta['max'] ?>" step="1"
-                                           placeholder="<?= fa_num((int) round(($meta['good'][0] + $meta['good'][1]) / 2)) ?>" />
-                                    <button class="btn btn-outline-secondary" type="button" data-apply="<?= htmlspecialchars($field) ?>">
-                                        اعمال
-                                    </button>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                        <div class="col-12">
-                            <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-primary" id="btnApplyAll">اعمال همه</button>
-                                <button type="button" class="btn btn-outline-secondary" id="btnClearAll">پاک کردن فرم</button>
-                            </div>
+        <div class="alert alert-secondary py-2 small d-flex align-items-center gap-2" role="note">
+            <i class="bi bi-info-circle"></i>
+            <span>
+                تا اتصال دماسنج‌ها، داده‌ای برای نمایش وجود ندارد. محدوده‌های زیر «دمای مطلوب» هر سالن هستند
+                و داشبورد خوانش‌های دریافتی را با همین محدوده‌ها مقایسه می‌کند.
+            </span>
+        </div>
+
+        <!-- خلاصه دماهای مطلوب به تفکیک فیلد -->
+        <div class="row g-3 mb-4">
+            <?php foreach (FIELDS as $field => $meta): ?>
+                <div class="col-12 col-lg-4">
+                    <div class="panel h-100">
+                        <div class="panel-head">
+                            <h2 class="panel-title">
+                                <i class="bi bi-thermometer-half"></i>
+                                <?= htmlspecialchars($meta['label']) ?>
+                                <small class="text-muted fw-normal">(<?= htmlspecialchars($meta['unit']) ?>)</small>
+                            </h2>
+                        </div>
+                        <div class="panel-body py-2 small text-muted">
+                            مقدار پیش‌فرض مطلوب:
+                            <b><?= fa_num($meta['good'][0]) ?> – <?= fa_num($meta['good'][1]) ?></b>
                         </div>
                     </div>
                 </div>
-            </div>
+            <?php endforeach; ?>
+        </div>
 
-            <div class="panel">
-                <div class="panel-head">
-                    <h2 class="panel-title"><i class="bi bi-grid-3x3-gap"></i> مقادیر <?= fa_num($saloons) ?> سالن</h2>
-                    <span class="small text-muted">
-                        <span class="legend-dot ok"></span> مطلوب
-                        <span class="legend-dot bad"></span> خارج از محدوده
-                    </span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table align-middle mb-0 entry-table">
-                        <thead>
-                            <tr>
-                                <th style="width:90px">سالن</th>
-                                <?php foreach (FIELDS as $field => $meta): ?>
-                                    <th>
-                                        <?= htmlspecialchars($meta['label']) ?>
-                                        <small class="text-muted d-block">
-                                            <?= htmlspecialchars($meta['unit']) ?> • <?= fa_num($meta['min']) ?> تا <?= fa_num($meta['max']) ?>
-                                        </small>
-                                    </th>
-                                <?php endforeach; ?>
-                                <th style="width:60px"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php for ($i = 1; $i <= $saloons; $i++): ?>
-                                <tr>
-                                    <td class="fw-semibold">سالن <?= fa_num($i) ?></td>
-                                    <?php foreach (FIELDS as $field => $meta): ?>
-                                        <td>
-                                            <input type="number" class="form-control form-control-sm saloon-input"
-                                                   name="<?= htmlspecialchars($field) ?>[]"
-                                                   data-field="<?= htmlspecialchars($field) ?>"
-                                                   data-good-min="<?= (int) $meta['good'][0] ?>"
-                                                   data-good-max="<?= (int) $meta['good'][1] ?>"
-                                                   min="<?= (int) $meta['min'] ?>" max="<?= (int) $meta['max'] ?>" step="1"
-                                                   aria-label="<?= htmlspecialchars($meta['label']) ?> سالن <?= $i ?>" />
-                                        </td>
-                                    <?php endforeach; ?>
-                                    <td>
-                                        <button type="button" class="btn btn-sm btn-light row-fill" data-saloon="<?= $i ?>" title="پر کردن این سالن با مقادیر نمونه">
-                                            <i class="bi bi-magic"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            <?php endfor; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="panel-foot d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <span class="small text-muted" id="formHint">مقادیر باید عدد صحیح باشند.</span>
-                    <div class="d-flex gap-2">
-                        <button type="reset" class="btn btn-outline-secondary">بازنشانی</button>
-                        <button type="submit" class="btn btn-brand px-4">
-                            <i class="bi bi-check2-circle"></i> ثبت خوانش در دیتابیس
-                        </button>
-                    </div>
-                </div>
+        <!-- جدول فقط‌خواندنی دمای مطلوب هر سالن -->
+        <div class="panel">
+            <div class="panel-head">
+                <h2 class="panel-title"><i class="bi bi-grid-3x3-gap"></i> محدوده مطلوب <?= fa_num($saloons) ?> سالن</h2>
+                <span class="small text-muted">فقط مشاهده — برای تغییر، وارد پنل ادمین شوید</span>
             </div>
-        </form>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0 entry-table">
+                    <thead>
+                        <tr>
+                            <th style="width:90px">سالن</th>
+                            <?php foreach (FIELDS as $field => $meta): ?>
+                                <th>
+                                    <?= htmlspecialchars($meta['label']) ?>
+                                    <small class="text-muted d-block"><?= htmlspecialchars($meta['unit']) ?></small>
+                                </th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php for ($i = 1; $i <= $saloons; $i++): ?>
+                            <tr>
+                                <td class="fw-semibold"><?= saloon_name($i) ?></td>
+                                <?php foreach (FIELDS as $field => $meta): ?>
+                                    <?php
+                                    [$low, $high] = $ranges[$field][$i];
+                                    $isCustom = $low !== (int) $meta['good'][0] || $high !== (int) $meta['good'][1];
+                                    ?>
+                                    <td>
+                                        <div class="range-readonly">
+                                            <span class="fw-semibold"><?= fa_num($low) ?> – <?= fa_num($high) ?></span>
+                                            <span class="text-muted"><?= htmlspecialchars($meta['unit']) ?></span>
+                                            <?php if ($isCustom): ?>
+                                                <span class="badge text-bg-warning">سفارشی</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endfor; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel-foot d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span class="small text-muted">
+                    <i class="bi bi-snow2"></i> خوانش واقعی توسط دماسنج‌ها دریافت و در داشبورد نمایش داده می‌شود.
+                </span>
+                <a href="<?= htmlspecialchars($dashboardUrl) ?>" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-speedometer2"></i> رفتن به داشبورد
+                </a>
+            </div>
+        </div>
 
         <footer class="text-center text-muted small py-4">
-            مانیتورینگ سالن‌های پرورش قارچ • PHP + MySQL + jQuery + Bootstrap
+            مانیتورینگ سالن‌های پرورش قارچ • PHP + MySQL + Bootstrap
         </footer>
     </main>
-
-    <div class="toast-container position-fixed bottom-0 start-0 p-3" id="toastArea"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        window.APP = {
-            apiUrl: <?= json_encode(base_url() . 'ajax.php') ?>,
-            saloons: <?= (int) $saloons ?>,
-            fields: <?= json_encode(FIELDS, JSON_UNESCAPED_UNICODE) ?>
-        };
-    </script>
-    <script src="js/entry.js"></script>
 </body>
 </html>
