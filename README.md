@@ -17,6 +17,10 @@
 - **جدول بازه‌های نیم‌ساعتی** در داشبورد: وضعیت ثبت هر بازه و زمان دقیق ثبت
 - **ورود ادمین** با رمز هش‌شده (bcrypt)، توکن CSRF و محدودیت تلاش ناموفق (۵ بار در ۱۵ دقیقه)
 - **تعیین بازه مطلوب هر سالن** به‌صورت جداگانه توسط ادمین (هر سالن می‌تواند بازهٔ خودش را داشته باشد)
+- **بخش اختصاصی هر سالن** (`saloon.php?id=N`): با کلیک روی کارت سالن باز می‌شود و دمای مطلوب همان سالن در آن تنظیم می‌شود
+- **مراحل پرورش هر سالن**: کمپوست، خاک‌دهی، هوادهی، فلش ۱، فلش ۲ و هر مرحلهٔ دلخواه دیگر؛ هر مرحله دمای مطلوب هوا/کمپوست و رطوبت مخصوص خودش را دارد
+- **شروع/پایان مرحله و سابقهٔ مراحل** برای هر سالن (تاریخ شروع، پایان، یادداشت، ثبت‌کننده)
+- **افزودن/ویرایش/حذف/جابه‌جایی مراحل** از پنل ادمین
 - **رابط RTL فارسی**، ریسپانسیو و سازگار با موبایل
 - **سازگار با چند ساختار جدول** (افقی، عمودی و ساختار قدیمی) بدون تغییر کد
 
@@ -29,6 +33,7 @@ temps/
 ├── config.php        # تنظیمات: فیلدها، تعداد سالن، بازه‌های پیش‌فرض، تشخیص ساختار جدول
 ├── database.php      # اتصال MySQLi + توابع کمکی کوئری
 ├── settings.php      # بازه مطلوب هر سالن + ساخت خودکار جدول‌های admins و admin_settings
+├── stages.php        # مراحل پرورش: تعریف مراحل، تنظیمات هر سالن در هر مرحله، سابقه اجرا
 ├── auth.php          # سشن، CSRF، ورود/خروج، محدودیت تلاش ورود
 ├── monitor.php       # لایه داده: خواندن خوانش‌ها، ارزیابی، ثبت، ثبت خودکار بازه‌ها
 ├── cron.php          # ثبت خودکار خوانش بازه جاری (برای cron / Task Scheduler)
@@ -37,12 +42,14 @@ temps/
 ├── index.php         # نمای فقط‌خواندنی دماهای مطلوب (خوانش واقعی از دماسنج‌ها)
 ├── login.php         # ورود ادمین (+ ساخت حساب مدیر در اولین اجرا)
 ├── logout.php        # خروج
-├── admin.php         # پنل ادمین: تعیین دما/رطوبت مطلوب هر سالن
+├── admin.php         # پنل ادمین: دما/رطوبت مطلوب هر سالن + مدیریت مراحل پرورش
+├── saloon.php        # بخش اختصاصی هر سالن: دمای مطلوب، مراحل، شروع/پایان مرحله، سابقه
 ├── style.css         # تم اختصاصی (RTL)
 └── js/
     ├── app.js        # منطق داشبورد (jQuery + Chart.js)
     ├── entry.js      # (قدیمی) منطق فرم ثبت دستی — دیگر استفاده نمی‌شود
-    └── admin.js      # منطق پنل ادمین (کپی/اعتبارسنجی بازه‌ها)
+    ├── admin.js      # منطق پنل ادمین (کپی/اعتبارسنجی بازه‌ها)
+    └── saloon.js     # منطق صفحه اختصاصی سالن (جابه‌جایی سالن، اعتبارسنجی بازه‌ها)
 ```
 
 ---
@@ -105,6 +112,7 @@ define('DB_NAME', 'mushroom');
 ### ۵) اجرا
 
 - داشبورد: <http://localhost/temps/dashboard.php>
+- بخش اختصاصی سالن: <http://localhost/temps/saloon.php?id=1>
 - دماهای مطلوب: <http://localhost/temps/index.php>
 - ورود ادمین: <http://localhost/temps/login.php>
 
@@ -196,6 +204,90 @@ C:\xampp\php\php.exe C:\xampp\htdocs\temps\cron.php
 
 در اولین استفاده، `admin_settings` و `admins` به‌صورت خودکار ساخته می‌شوند (نیازی به اجرای دستی SQL نیست).
 اگر ستون `created_at` در جدول `temps` نباشد، اضافه می‌شود.
+جدول‌های مراحل پرورش (`saloon_stages`، `saloon_stage_settings`، `saloon_stage_logs`) هم در اولین اجرا ساخته و
+مراحل پیش‌فرض (کمپوست، خاک‌دهی، هوادهی، فلش ۱، فلش ۲) در آن‌ها درج می‌شوند.
+
+---
+
+## 🏠 بخش اختصاصی هر سالن و مراحل پرورش
+
+با کلیک روی کارت هر سالن در داشبورد (یا لینک نام سالن در جدول‌ها) صفحهٔ اختصاصی آن باز می‌شود:
+
+```
+http://localhost/temps/saloon.php?id=1
+```
+
+| بخش | توضیح |
+|---|---|
+| خوانش لحظه‌ای | مقدار فعلی هوا/کمپوست/رطوبت همان سالن + بازهٔ مطلوب مؤثر |
+| دمای مطلوب سالن | بازهٔ پیش‌فرض همان سالن (وقتی مرحله‌ای فعال نیست) |
+| خط زمانی مراحل | کمپوست → خاک‌دهی → هوادهی → فلش ۱ → فلش ۲ → ... |
+| شروع/پایان مرحله | انتخاب مرحله، تاریخ شروع و یادداشت؛ با شروع مرحلهٔ جدید، مرحلهٔ قبلی بسته می‌شود |
+| دمای مطلوب هر مرحله | بازهٔ جداگانهٔ هوا/کمپوست/رطوبت و مدت (روز) برای همین سالن در هر مرحله |
+| سابقهٔ مراحل | تاریخ شروع/پایان، یادداشت و ثبت‌کنندهٔ هر مرحله |
+
+**اولویت بازهٔ مطلوب در ارزیابی:** بازهٔ مرحلهٔ فعال سالن ← بازهٔ سفارشی سالن (پنل ادمین) ← پیش‌فرض `FIELDS`.
+
+### مدیریت مراحل (پنل ادمین)
+
+در پایین `admin.php` بخش «مراحل پرورش سالن‌ها» قرار دارد:
+
+- افزودن مرحلهٔ جدید (نام، آیکون Bootstrap، رنگ، مدت، بازهٔ پیش‌فرض دما/رطوبت، توضیح)
+- ویرایش، حذف و جابه‌جایی ترتیب مراحل
+- غیرفعال‌کردن مرحله بدون حذف آن
+
+### جدول‌های مراحل
+
+```sql
+-- تعریف مراحل (مشترک بین همه سالن‌ها)
+CREATE TABLE saloon_stages (
+  id SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(40) NOT NULL UNIQUE,
+  name VARCHAR(80) NOT NULL,
+  icon VARCHAR(40) NOT NULL DEFAULT 'bi-circle',
+  color VARCHAR(20) NOT NULL DEFAULT '#1f8a70',
+  sort_order SMALLINT NOT NULL DEFAULT 0,
+  duration_days SMALLINT UNSIGNED NULL,
+  air_min DECIMAL(5,1) NULL, air_max DECIMAL(5,1) NULL,
+  compost_min DECIMAL(5,1) NULL, compost_max DECIMAL(5,1) NULL,
+  rh_min DECIMAL(5,1) NULL, rh_max DECIMAL(5,1) NULL,
+  description VARCHAR(255) NOT NULL DEFAULT '',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+-- تنظیمات هر سالن در هر مرحله
+CREATE TABLE saloon_stage_settings (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  saloon_id TINYINT UNSIGNED NOT NULL,
+  stage_id SMALLINT UNSIGNED NOT NULL,
+  air_min DECIMAL(5,1) NULL, air_max DECIMAL(5,1) NULL,
+  compost_min DECIMAL(5,1) NULL, compost_max DECIMAL(5,1) NULL,
+  rh_min DECIMAL(5,1) NULL, rh_max DECIMAL(5,1) NULL,
+  duration_days SMALLINT UNSIGNED NULL,
+  note VARCHAR(255) NOT NULL DEFAULT '',
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_saloon_stage (saloon_id, stage_id),
+  FOREIGN KEY (saloon_id) REFERENCES saloons(id) ON DELETE CASCADE,
+  FOREIGN KEY (stage_id) REFERENCES saloon_stages(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+-- سابقهٔ اجرای مراحل هر سالن
+CREATE TABLE saloon_stage_logs (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  saloon_id TINYINT UNSIGNED NOT NULL,
+  stage_id SMALLINT UNSIGNED NOT NULL,
+  started_at DATETIME NOT NULL,
+  ended_at DATETIME NULL,
+  note VARCHAR(255) NOT NULL DEFAULT '',
+  created_by VARCHAR(50) NOT NULL DEFAULT '',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (saloon_id) REFERENCES saloons(id) ON DELETE CASCADE,
+  FOREIGN KEY (stage_id) REFERENCES saloon_stages(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+```
+
+> این جدول‌ها به‌صورت خودکار ساخته می‌شوند؛ SQL بالا فقط برای مرجع است.
 
 ---
 
@@ -255,7 +347,10 @@ curl -X POST http://localhost/temps/ajax.php \
 ```bash
 php -l ajax.php
 php -l monitor.php
+php -l stages.php
+php -l saloon.php
 node --check js/app.js
+node --check js/saloon.js
 ```
 
 ---
