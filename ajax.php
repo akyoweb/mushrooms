@@ -51,14 +51,17 @@ function action_snapshot(): void
     $views = [];
     $alerts = [];
     $goodCount = 0;
+    $activeStages = active_stages();
 
     for ($i = 0; $i < $saloons; $i++) {
-        $card = ['saloon' => $i + 1, 'values' => [], 'issues' => []];
+        $saloonId = $i + 1;
+        $active = $activeStages[$saloonId] ?? null;
+        $card = ['saloon' => $saloonId, 'values' => [], 'issues' => [], 'stage' => $active];
         foreach (FIELDS as $field => $meta) {
             $value = $latest ? ($latest[$field][$i] ?? null) : null;
-            // بازه مطلوب هر سالن از پنل ادمین خوانده می‌شود
-            $range = saloon_range($field, $i + 1);
-            $check = judge($field, $value, $i + 1);
+            // بازه مطلوب: مرحله فعال سالن ← بازه سفارشی سالن (پنل ادمین) ← پیش‌فرض
+            $range = saloon_effective_range($field, $saloonId);
+            $check = judge($field, $value, $saloonId);
             $card['values'][$field] = [
                 'value' => $value,
                 'status' => $check['status'],
@@ -66,13 +69,15 @@ function action_snapshot(): void
                 'good' => $range,
                 'default_good' => $meta['good'],
                 'custom' => $range !== [(int) $meta['good'][0], (int) $meta['good'][1]],
+                'from_stage' => $active !== null && stage_range($saloonId, $field) !== null,
                 'label' => $meta['label'],
                 'unit' => $meta['unit'],
             ];
             if ($check['status'] === 'low' || $check['status'] === 'high') {
                 $card['issues'][] = $meta['label'];
                 $alerts[] = [
-                    'saloon' => $i + 1,
+                    'saloon' => $saloonId,
+                    'stage' => $active['stage_name'] ?? null,
                     'field' => $field,
                     'label' => $meta['label'],
                     'status' => $check['status'],
@@ -128,6 +133,7 @@ function action_snapshot(): void
         'ranges' => good_ranges(),
         'fieldsWithRanges' => fields_with_ranges(),
         'rangesCustomized' => ranges_customized(),
+        'stages' => array_values(stage_rows(true)),
         'histories' => $histories,
     ]);
 }

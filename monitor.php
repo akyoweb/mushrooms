@@ -369,8 +369,23 @@ function auto_capture(?string $forcePeriod = null, bool $allowCatchUp = true): a
 /* ------------------------------------------------------------------ */
 
 /**
+ * بازه مطلوب مؤثر یک سالن در یک فیلد
+ * اولویت: بازه مرحله فعال سالن ← بازه سفارشی سالن (پنل ادمین) ← پیش‌فرض فیلد
+ * @return array{0:float,1:float}
+ */
+function saloon_effective_range(string $field, int $saloon): array
+{
+    $stageRange = stage_range($saloon, $field);
+    if ($stageRange !== null) {
+        return $stageRange;
+    }
+    return saloon_range($field, $saloon);
+}
+
+/**
  * وضعیت یک مقدار نسبت به بازه مطلوب
  * اگر شماره سالن داده شود، بازه سفارشی همان سالن (از پنل ادمین) استفاده می‌شود.
+ * اگر سالن مرحله فعال داشته باشد، بازه مطلوب همان مرحله اولویت دارد.
  * @return array{status:string,text:string,tone:string}
  */
 function judge(string $field, ?float $value, ?int $saloon = null): array
@@ -379,7 +394,8 @@ function judge(string $field, ?float $value, ?int $saloon = null): array
     if ($value === null) {
         return ['status' => 'nodata', 'text' => 'بدون داده', 'tone' => 'secondary'];
     }
-    [$low, $high] = $saloon !== null ? saloon_range($field, $saloon) : $meta['good'];
+    $range = $saloon !== null ? saloon_effective_range($field, $saloon) : $meta['good'];
+    [$low, $high] = $range;
     if ($value < $low) {
         return ['status' => 'low', 'text' => 'کمتر از حد مطلوب', 'tone' => 'info'];
     }
