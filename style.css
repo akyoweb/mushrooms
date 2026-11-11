@@ -878,3 +878,249 @@ code {
     .schema-flow { flex-direction: column; }
     .schema-arrow { transform: rotate(90deg); }
 }
+
+/* ==========================================================
+   بخش اختصاصی سالن (saloon.php) و مراحل پرورش
+   ========================================================== */
+
+.saloon-switch {
+    max-width: 150px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+/* ---------- نشان مرحله ---------- */
+.stage-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    background: var(--stage-color, var(--brand));
+    color: #fff;
+    font-size: .8rem;
+    font-weight: 700;
+    padding: .4rem .8rem;
+    border-radius: 20px;
+}
+
+.stage-name {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.stage-name .bi {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--stage-color, var(--brand)) 16%, #fff);
+    color: var(--stage-color, var(--brand));
+    font-size: .85rem;
+}
+
+/* ---------- خط زمانی مراحل ---------- */
+.stage-timeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.stage-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .45rem .8rem;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #fbfdfc;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ink);
+    position: relative;
+}
+
+.stage-chip .bi {
+    color: var(--stage-color, var(--brand));
+    font-size: 1rem;
+}
+
+.stage-chip small {
+    font-size: .65rem;
+    background: var(--stage-color, var(--brand));
+    color: #fff;
+    border-radius: 10px;
+    padding: .05rem .4rem;
+}
+
+.stage-chip.is-active {
+    border-color: var(--stage-color, var(--brand));
+    background: color-mix(in srgb, var(--stage-color, var(--brand)) 10%, #fff);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--stage-color, var(--brand)) 18%, transparent);
+}
+
+.stage-chip.is-off {
+    opacity: .5;
+    text-decoration: line-through;
+}
+
+/* ---------- جدول مراحل ---------- */
+.stage-table thead th {
+    background: #fbfdfc;
+    font-size: .78rem;
+    color: var(--muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+
+.stage-table td {
+    padding: .4rem .5rem;
+    vertical-align: middle;
+}
+
+.stage-table tr.row-custom td:first-child {
+    border-inline-start: 3px solid var(--brand);
+    background: #f7fcfa;
+}
+
+.stage-table tr.row-active td {
+    background: #f2fbf7;
+}
+
+.range-pair {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    min-width: 150px;
+}
+
+.range-pair .form-control {
+    text-align: center;
+    font-weight: 700;
+    max-width: 70px;
+}
+
+.range-sep {
+    color: var(--muted);
+    font-weight: 700;
+}
+
+/* ---------- کارت سالن قابل کلیک ---------- */
+.saloon-card-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    height: 100%;
+}
+
+.saloon-card-link:hover {
+    color: inherit;
+}
+
+.saloon-card .saloon-open {
+    font-size: .7rem;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    opacity: 0;
+    transition: opacity .15s ease;
+}
+
+.saloon-card:hover .saloon-open {
+    opacity: 1;
+}
+
+.saloon-stage {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .4rem;
+    padding: .35rem .9rem;
+    border-top: 1px solid var(--line);
+    background: #fbfdfc;
+    font-size: .72rem;
+    color: var(--muted);
+}
+
+.saloon-stage .stage-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-weight: 700;
+    color: var(--stage-color, var(--brand));
+}
+
+/* ---------- مدیریت مراحل در پنل ادمین ---------- */
+.stage-admin-table thead th {
+    background: #fbfdfc;
+    font-size: .78rem;
+    color: var(--muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+
+.stage-admin-table td {
+    font-size: .85rem;
+    vertical-align: middle;
+}
+
+.stage-admin-table .form-control-sm {
+    max-width: 90px;
+    text-align: center;
+    font-weight: 700;
+}
+
+.stage-admin-table .form-control-sm.stage-text {
+    max-width: none;
+    text-align: start;
+    font-weight: 500;
+}
+
+.stage-admin-table .form-control-sm.stage-color {
+    max-width: 60px;
+    padding: .15rem;
+}
+
+.stage-admin-table .form-control-sm.stage-icon {
+    max-width: 130px;
+    text-align: start;
+    font-weight: 500;
+    direction: ltr;
+}
+
+.stage-admin-table tr.is-off td {
+    opacity: .6;
+}
+
+.stage-admin-table tr.is-off td:first-child {
+    border-inline-start: 3px solid #adb5bd;
+}
+
+@media (max-width: 575.98px) {
+    .range-pair {
+        min-width: 120px;
+    }
+    .range-pair .form-control {
+        max-width: 56px;
+    }
+    .saloon-switch {
+        max-width: 110px;
+    }
+}
+
+/* لینک سالن در جدول تفصیلی داشبورد */
+.saloon-link {
+    color: var(--brand-dark);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.saloon-link:hover {
+    text-decoration: underline;
+}
