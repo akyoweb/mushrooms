@@ -26,6 +26,7 @@ function saloon_name(int $saloon): string
 
 require_once __DIR__ . '/settings.php';
 require_once __DIR__ . '/schema.php';
+require_once __DIR__ . '/stages.php';
 
 /**
  * تعریف فیلدها
@@ -53,8 +54,8 @@ define('FIELDS_BASE', [
     'compost' => [
         'label' => 'دمای کمپوست',
         'unit'  => '°C',
-        'min'   => 18,
-        'max'   => 21,
+        'min'   => 10,
+        'max'   => 40,
         'good'  => [16, 20],
         'step'  => 0.45,
         'base'  => 17.8,

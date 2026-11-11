@@ -12,6 +12,10 @@
  *        │ 1
  * readings_table (هر سطر = یک نوبت خوانشِ هم‌زمان همه سالن‌ها)
  *
+ * مراحل پرورش هر سالن:
+ * saloons ──1:N──> saloon_stage_settings ──N:1──> saloon_stages
+ * saloons ──1:N──> saloon_stage_logs     ──N:1──> saloon_stages
+ *
  * خروجی نهایی در phpMyAdmin: ویوی saloon_monitor
  * (هر سطر: نام سالن + دمای هوا + دمای کمپوست + رطوبت + زمان)
  */
@@ -25,10 +29,17 @@ const T_SALOON_D = 'saloon_readings';
 const T_VIEW = 'saloon_monitor';
 const T_LEGACY = 'temps';
 
+/** مراحل پرورش هر سالن (کمپوست، خاک‌دهی، هوادهی، فلش ۱، فلش ۲ و ...) */
+const T_STAGES = 'saloon_stages';
+/** تنظیمات هر سالن در هر مرحله (دمای مطلوب، رطوبت، مدت) */
+const T_STAGE_SETTINGS = 'saloon_stage_settings';
+/** سابقه اجرای مراحل هر سالن (شروع/پایان/یادداشت) */
+const T_STAGE_LOGS = 'saloon_stage_logs';
+
 /** جدول‌های داخلی که در شمارش «داده‌های واقعی» حساب نمی‌شوند */
 function schema_tables(): array
 {
-    return [T_SALOONS, T_READINGS, T_SALOON_D, T_LEGACY];
+    return [T_SALOONS, T_READINGS, T_SALOON_D, T_LEGACY, T_STAGES, T_STAGE_SETTINGS, T_STAGE_LOGS];
 }
 
 /** آیا ساختار جدید ساخته شده است؟ */
@@ -175,10 +186,13 @@ function schema_ensure(): array
             db_run($sql . implode(',', $values));
         }
 
-        // ---------- ۵) انتقال داده‌های قدیمی temps → ساختار جدید ----------
+        // ---------- ۵) مراحل پرورش هر سالن ----------
+        schema_ensure_stages();
+
+        // ---------- ۶) انتقال داده‌های قدیمی temps → ساختار جدید ----------
         $migrated = schema_migrate_legacy();
 
-        // ---------- ۶) ویوم آماده برای مشاهده در phpMyAdmin ----------
+        // ---------- ۷) ویوم آماده برای مشاهده در phpMyAdmin ----------
         db_run('DROP VIEW IF EXISTS `' . T_VIEW . '`');
         db_run(
             'CREATE VIEW `' . T_VIEW . '` AS
@@ -379,6 +393,100 @@ function schema_migrate_legacy(): int
 }
 
 /* ------------------------------------------------------------------ */
+/* مراحل پرورش سالن‌ها                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * ساخت جدول‌های مراحل پرورش (قابل اجرا در هر بار لود؛ فقط اولین بار کار می‌کند)
+ *
+ * saloon_stages          : تعریف مراحل (کمپوست، خاک‌دهی، هوادهی، فلش ۱، فلش ۲ و مراحل دلخواه)
+ * saloon_stage_settings  : تنظیمات هر سالن در هر مرحله (دمای مطلوب هوا/کمپوست، رطوبت، مدت)
+ * saloon_stage_logs      : سابقه اجرای مراحل هر سالن (شروع، پایان، یادداشت)
+ */
+function schema_ensure_stages(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    if (!table_exists(T_STAGES)) {
+        db_run(
+            'CREATE TABLE `' . T_STAGES . '` (
+                `id` SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `code` VARCHAR(40) NOT NULL,
+                `name` VARCHAR(80) NOT NULL,
+                `icon` VARCHAR(40) NOT NULL DEFAULT \'bi-circle\',
+                `color` VARCHAR(20) NOT NULL DEFAULT \'#1f8a70\',
+                `sort_order` SMALLINT NOT NULL DEFAULT 0,
+                `duration_days` SMALLINT UNSIGNED NULL,
+                `air_min` DECIMAL(5,1) NULL,
+                `air_max` DECIMAL(5,1) NULL,
+                `compost_min` DECIMAL(5,1) NULL,
+                `compost_max` DECIMAL(5,1) NULL,
+                `rh_min` DECIMAL(5,1) NULL,
+                `rh_max` DECIMAL(5,1) NULL,
+                `description` VARCHAR(255) NOT NULL DEFAULT \'\',
+                `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+                `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uniq_stage_code` (`code`),
+                KEY `idx_stage_order` (`sort_order`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci'
+        );
+    }
+
+    if (!table_exists(T_STAGE_SETTINGS)) {
+        db_run(
+            'CREATE TABLE `' . T_STAGE_SETTINGS . '` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `saloon_id` TINYINT UNSIGNED NOT NULL,
+                `stage_id` SMALLINT UNSIGNED NOT NULL,
+                `air_min` DECIMAL(5,1) NULL,
+                `air_max` DECIMAL(5,1) NULL,
+                `compost_min` DECIMAL(5,1) NULL,
+                `compost_max` DECIMAL(5,1) NULL,
+                `rh_min` DECIMAL(5,1) NULL,
+                `rh_max` DECIMAL(5,1) NULL,
+                `duration_days` SMALLINT UNSIGNED NULL,
+                `note` VARCHAR(255) NOT NULL DEFAULT \'\',
+                `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uniq_saloon_stage` (`saloon_id`, `stage_id`),
+                KEY `idx_stage` (`stage_id`),
+                CONSTRAINT `fk_ss_saloon` FOREIGN KEY (`saloon_id`)
+                    REFERENCES `' . T_SALOONS . '` (`id`) ON DELETE CASCADE,
+                CONSTRAINT `fk_ss_stage` FOREIGN KEY (`stage_id`)
+                    REFERENCES `' . T_STAGES . '` (`id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci'
+        );
+    }
+
+    if (!table_exists(T_STAGE_LOGS)) {
+        db_run(
+            'CREATE TABLE `' . T_STAGE_LOGS . '` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `saloon_id` TINYINT UNSIGNED NOT NULL,
+                `stage_id` SMALLINT UNSIGNED NOT NULL,
+                `started_at` DATETIME NOT NULL,
+                `ended_at` DATETIME NULL,
+                `note` VARCHAR(255) NOT NULL DEFAULT \'\',
+                `created_by` VARCHAR(50) NOT NULL DEFAULT \'\',
+                `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `idx_log_saloon` (`saloon_id`, `started_at`),
+                KEY `idx_log_stage` (`stage_id`),
+                CONSTRAINT `fk_sl_saloon` FOREIGN KEY (`saloon_id`)
+                    REFERENCES `' . T_SALOONS . '` (`id`) ON DELETE CASCADE,
+                CONSTRAINT `fk_sl_stage` FOREIGN KEY (`stage_id`)
+                    REFERENCES `' . T_STAGES . '` (`id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci'
+        );
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* خواندن                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -395,6 +503,15 @@ function saloon_rows(): array
         'code' => $r['code'],
         'active' => (int) $r['active'],
     ], $rows);
+}
+
+/** آیا سالن با این شناسه وجود دارد؟ */
+function saloon_exists(int $saloon): bool
+{
+    if ($saloon < 1 || $saloon > SALOON_COUNT) {
+        return false;
+    }
+    return !empty(db_all('SELECT 1 AS x FROM `' . T_SALOONS . '` WHERE `id` = ?', [$saloon], 'i'));
 }
 
 /** نام سالن از دیتابیس (با fallback به config) */
