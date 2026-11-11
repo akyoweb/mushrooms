@@ -48,6 +48,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'apply_all') {
             // اعمال مقدار یک سالن به همه سالن‌ها فقط در همین فرم (بدون ذخیره)
             $notice = 'از دکمه‌های ردیف برای کپی مقادیر در فرم استفاده کنید.';
+        } elseif ($action === 'stage_save') {
+            // افزودن یا ویرایش مرحله پرورش
+            $stageId = (int) ($_POST['stage_id'] ?? 0);
+            $payload = [
+                'name' => $_POST['name'] ?? '',
+                'icon' => $_POST['icon'] ?? '',
+                'color' => $_POST['color'] ?? '',
+                'duration_days' => $_POST['duration_days'] ?? null,
+                'air' => [$_POST['air_min'] ?? null, $_POST['air_max'] ?? null],
+                'compost' => [$_POST['compost_min'] ?? null, $_POST['compost_max'] ?? null],
+                'rh' => [$_POST['rh_min'] ?? null, $_POST['rh_max'] ?? null],
+                'description' => $_POST['description'] ?? '',
+                'is_active' => !empty($_POST['is_active']),
+            ];
+            $result = save_stage($payload, $stageId > 0 ? $stageId : null);
+            if ($result['ok']) {
+                $notice = $stageId > 0 ? 'مرحله ویرایش شد.' : 'مرحله جدید اضافه شد.';
+            } else {
+                $errors = $result['errors'];
+                $noticeTone = 'warning';
+            }
+        } elseif ($action === 'stage_delete') {
+            $result = delete_stage((int) ($_POST['stage_id'] ?? 0));
+            if ($result['ok']) {
+                $notice = 'مرحله حذف شد (تنظیمات و سابقه مرتبط هم حذف شدند).';
+            } else {
+                $errors[] = $result['error'];
+                $noticeTone = 'warning';
+            }
+        } elseif ($action === 'stage_move') {
+            $moved = move_stage((int) ($_POST['stage_id'] ?? 0), (string) ($_POST['direction'] ?? 'up'));
+            $notice = $moved ? 'ترتیب مراحل تغییر کرد.' : 'جابه‌جایی امکان‌پذیر نبود.';
+            $noticeTone = $moved ? 'success' : 'warning';
         }
     }
 }
@@ -71,6 +104,13 @@ foreach (array_keys(FIELDS) as $field) {
 $fields = FIELDS;
 $customized = (int) db_all('SELECT COUNT(*) AS c FROM `' . SETTINGS_TABLE . '`')[0]['c'];
 $dashboardUrl = base_url() . 'dashboard.php';
+
+// مراحل پرورش (مشترک بین همه سالن‌ها)
+$stages = stage_rows();
+$stageSettingsCount = (int) db_all('SELECT COUNT(*) AS c FROM `' . T_STAGE_SETTINGS . '`')[0]['c'];
+$activeStageCount = count(active_stages());
+$editStageId = (int) ($_GET['stage'] ?? 0);
+$editStage = $editStageId > 0 ? stage_find($editStageId) : null;
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -115,6 +155,9 @@ $dashboardUrl = base_url() . 'dashboard.php';
                 </p>
             </div>
             <div class="d-flex gap-2">
+                <a href="#stages" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-diagram-2"></i> مراحل پرورش
+                </a>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btnFillDefaults">
                     <i class="bi bi-arrow-counterclockwise"></i> پرکردن با پیش‌فرض‌ها
                 </button>
@@ -187,7 +230,7 @@ $dashboardUrl = base_url() . 'dashboard.php';
                         <table class="table align-middle mb-0 ranges-table">
                             <thead>
                                 <tr>
-                                    <th style="width:120px">سالن</th>
+                                    <th style="width:150px">سالن</th>
                                     <th style="width:170px">حداقل (<?= htmlspecialchars($meta['unit']) ?>)</th>
                                     <th style="width:170px">حداکثر (<?= htmlspecialchars($meta['unit']) ?>)</th>
                                     <th>وضعیت</th>
@@ -201,7 +244,11 @@ $dashboardUrl = base_url() . 'dashboard.php';
                                     $isCustom = $low !== (int) $meta['good'][0] || $high !== (int) $meta['good'][1];
                                     ?>
                                     <tr data-saloon="<?= $i ?>" class="<?= $isCustom ? 'row-custom' : '' ?>">
-                                        <td class="fw-semibold"><?= saloon_name($i) ?></td>
+                                        <td class="fw-semibold">
+                                            <a class="saloon-link" href="saloon.php?id=<?= $i ?>" title="بخش اختصاصی سالن">
+                                                <?= saloon_name($i) ?> <i class="bi bi-box-arrow-up-left small"></i>
+                                            </a>
+                                        </td>
                                         <td>
                                             <input type="number" step="1"
                                                    class="form-control form-control-sm range-input"
@@ -249,6 +296,180 @@ $dashboardUrl = base_url() . 'dashboard.php';
             </div>
         </form>
 
+        <!-- مراحل پرورش سالن‌ها -->
+        <div class="panel mt-4" id="stages">
+            <div class="panel-head">
+                <h2 class="panel-title"><i class="bi bi-diagram-2"></i> مراحل پرورش سالن‌ها</h2>
+                <span class="small text-muted">
+                    <?= fa_num(count($stages)) ?> مرحله •
+                    <?= fa_num($stageSettingsCount) ?> تنظیم اختصاصی سالن •
+                    <?= fa_num($activeStageCount) ?> سالن با مرحله فعال
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0 stage-admin-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px">ترتیب</th>
+                            <th>مرحله</th>
+                            <th>دمای هوا</th>
+                            <th>دمای کمپوست</th>
+                            <th>رطوبت</th>
+                            <th style="width:90px">مدت (روز)</th>
+                            <th style="width:90px">وضعیت</th>
+                            <th style="width:150px">عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($stages as $index => $stage): ?>
+                            <tr class="<?= $stage['is_active'] ? '' : 'is-off' ?>">
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <form method="post" action="admin.php#stages">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="form" value="stage_move">
+                                            <input type="hidden" name="stage_id" value="<?= $stage['id'] ?>">
+                                            <input type="hidden" name="direction" value="up">
+                                            <button type="submit" class="btn btn-light btn-sm" title="بالا" <?= $index === 0 ? 'disabled' : '' ?>>
+                                                <i class="bi bi-arrow-up"></i>
+                                            </button>
+                                        </form>
+                                        <form method="post" action="admin.php#stages">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="form" value="stage_move">
+                                            <input type="hidden" name="stage_id" value="<?= $stage['id'] ?>">
+                                            <input type="hidden" name="direction" value="down">
+                                            <button type="submit" class="btn btn-light btn-sm" title="پایین" <?= $index === count($stages) - 1 ? 'disabled' : '' ?>>
+                                                <i class="bi bi-arrow-down"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="stage-name" style="--stage-color: <?= htmlspecialchars($stage['color']) ?>">
+                                        <i class="bi <?= htmlspecialchars($stage['icon']) ?>"></i>
+                                        <?= htmlspecialchars($stage['name']) ?>
+                                    </span>
+                                    <small class="text-muted d-block"><code><?= htmlspecialchars($stage['code']) ?></code></small>
+                                </td>
+                                <td class="small"><?= $stage['air'][0] === null ? '—' : fa_num($stage['air'][0]) . ' – ' . fa_num($stage['air'][1]) ?></td>
+                                <td class="small"><?= $stage['compost'][0] === null ? '—' : fa_num($stage['compost'][0]) . ' – ' . fa_num($stage['compost'][1]) ?></td>
+                                <td class="small"><?= $stage['rh'][0] === null ? '—' : fa_num($stage['rh'][0]) . ' – ' . fa_num($stage['rh'][1]) ?></td>
+                                <td class="small"><?= $stage['duration_days'] === null ? '—' : fa_num($stage['duration_days']) ?></td>
+                                <td>
+                                    <span class="badge text-bg-<?= $stage['is_active'] ? 'success' : 'secondary' ?>"
+                                        data-bs-toggle="tooltip" title="<?= htmlspecialchars($stage['description']) ?>">
+                                        <?= $stage['is_active'] ? 'فعال' : 'غیرفعال' ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="admin.php?stage=<?= $stage['id'] ?>#stageForm" class="btn btn-light" title="ویرایش">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form method="post" action="admin.php#stages"
+                                            onsubmit="return confirm('مرحله «<?= htmlspecialchars($stage['name'], ENT_QUOTES) ?>» و همه تنظیمات و سابقه آن حذف شود؟');">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="form" value="stage_delete">
+                                            <input type="hidden" name="stage_id" value="<?= $stage['id'] ?>">
+                                            <button type="submit" class="btn btn-light text-danger" title="حذف">
+                                                <i class="bi bi-trash3"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel-foot small text-muted">
+                <i class="bi bi-info-circle"></i>
+                مراحل مشترک بین همه سالن‌ها هستند؛ دمای مطلوب هر مرحله برای هر سالن در صفحه اختصاصی همان سالن تنظیم می‌شود.
+            </div>
+        </div>
+
+        <!-- فرم افزودن / ویرایش مرحله -->
+        <div class="panel mt-4" id="stageForm">
+            <div class="panel-head">
+                <h2 class="panel-title">
+                    <i class="bi <?= $editStage ? 'bi-pencil-square' : 'bi-plus-circle' ?>"></i>
+                    <?= $editStage ? 'ویرایش مرحله: ' . htmlspecialchars($editStage['name']) : 'افزودن مرحله جدید' ?>
+                </h2>
+                <?php if ($editStage): ?>
+                    <a href="admin.php#stages" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-x-lg"></i> انصراف از ویرایش
+                    </a>
+                <?php endif; ?>
+            </div>
+            <form method="post" action="admin.php#stages">
+                <?= csrf_field() ?>
+                <input type="hidden" name="form" value="stage_save">
+                <input type="hidden" name="stage_id" value="<?= $editStage ? $editStage['id'] : 0 ?>">
+                <div class="panel-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small">نام مرحله</label>
+                            <input type="text" name="name" class="form-control form-control-sm" maxlength="80" required
+                                value="<?= htmlspecialchars($editStage['name'] ?? '') ?>" placeholder="مثلاً فلش ۳">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">آیکون (Bootstrap)</label>
+                            <input type="text" name="icon" class="form-control form-control-sm" dir="ltr"
+                                value="<?= htmlspecialchars($editStage['icon'] ?? 'bi-circle') ?>" placeholder="bi-circle">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">رنگ</label>
+                            <input type="color" name="color" class="form-control form-control-sm form-control-color"
+                                value="<?= htmlspecialchars($editStage['color'] ?? '#1f8a70') ?>">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small">مدت (روز)</label>
+                            <input type="number" name="duration_days" min="0" max="365" class="form-control form-control-sm"
+                                value="<?= $editStage && $editStage['duration_days'] !== null ? (int) $editStage['duration_days'] : '' ?>">
+                        </div>
+                        <div class="col-6 col-md-2 d-flex align-items-end">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_active" id="stageActive"
+                                    <?= !$editStage || $editStage['is_active'] ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="stageActive">فعال</label>
+                            </div>
+                        </div>
+
+                        <?php foreach (['air' => 'دمای هوا', 'compost' => 'دمای کمپوست', 'rh' => 'رطوبت'] as $key => $label): ?>
+                            <?php $meta = FIELDS[$key === 'rh' ? 'RH' : $key]; ?>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label small">
+                                    <?= htmlspecialchars($label) ?> (<?= htmlspecialchars($meta['unit']) ?>) — پیش‌فرض مرحله
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">حداقل</span>
+                                    <input type="number" step="1" name="<?= $key ?>_min" class="form-control"
+                                        min="<?= (int) $meta['min'] ?>" max="<?= (int) $meta['max'] ?>"
+                                        value="<?= $editStage && $editStage[$key][0] !== null ? (int) $editStage[$key][0] : '' ?>">
+                                    <span class="input-group-text">حداکثر</span>
+                                    <input type="number" step="1" name="<?= $key ?>_max" class="form-control"
+                                        min="<?= (int) $meta['min'] ?>" max="<?= (int) $meta['max'] ?>"
+                                        value="<?= $editStage && $editStage[$key][1] !== null ? (int) $editStage[$key][1] : '' ?>">
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+
+                        <div class="col-12">
+                            <label class="form-label small">توضیح</label>
+                            <input type="text" name="description" class="form-control form-control-sm" maxlength="255"
+                                value="<?= htmlspecialchars($editStage['description'] ?? '') ?>" placeholder="اختیاری">
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-foot d-flex justify-content-end">
+                    <button type="submit" class="btn btn-brand btn-sm px-4">
+                        <i class="bi bi-check2-circle"></i> <?= $editStage ? 'ذخیره تغییرات' : 'افزودن مرحله' ?>
+                    </button>
+                </div>
+            </form>
+        </div>
+
         <!-- ساختار متصل دیتابیس -->
         <?php
         $schemaInfo = monitor_boot();
@@ -280,6 +501,33 @@ $dashboardUrl = base_url() . 'dashboard.php';
                     <div class="schema-box">
                         <b><i class="bi bi-clock-history"></i> <?= T_READINGS ?></b>
                         <span>زمان هر نوبت خوانش</span>
+                    </div>
+                </div>
+                <div class="schema-flow mt-2">
+                    <div class="schema-box">
+                        <b><i class="bi bi-house-door"></i> <?= T_SALOONS ?></b>
+                        <span>سالن‌ها</span>
+                    </div>
+                    <span class="schema-arrow">1 : N</span>
+                    <div class="schema-box">
+                        <b><i class="bi bi-sliders"></i> <?= T_STAGE_SETTINGS ?></b>
+                        <span>دمای مطلوب هر مرحله در هر سالن</span>
+                    </div>
+                    <span class="schema-arrow">N : 1</span>
+                    <div class="schema-box">
+                        <b><i class="bi bi-diagram-2"></i> <?= T_STAGES ?></b>
+                        <span>کمپوست، خاک‌دهی، هوادهی، فلش ۱، فلش ۲ و ...</span>
+                    </div>
+                </div>
+                <div class="schema-flow mt-2">
+                    <div class="schema-box">
+                        <b><i class="bi bi-house-door"></i> <?= T_SALOONS ?></b>
+                        <span>سالن‌ها</span>
+                    </div>
+                    <span class="schema-arrow">1 : N</span>
+                    <div class="schema-box">
+                        <b><i class="bi bi-clock-history"></i> <?= T_STAGE_LOGS ?></b>
+                        <span>سابقه شروع/پایان مراحل هر سالن</span>
                     </div>
                 </div>
 
