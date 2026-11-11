@@ -117,7 +117,11 @@ foreach (array_keys(FIELDS) as $field) {
                     <tbody>
                         <?php for ($i = 1; $i <= $saloons; $i++): ?>
                             <tr>
-                                <td class="fw-semibold"><?= saloon_name($i) ?></td>
+                                <td class="fw-semibold">
+                                    <a class="saloon-link" href="saloon.php?id=<?= $i ?>" title="بخش اختصاصی سالن">
+                                        <?= saloon_name($i) ?> <i class="bi bi-box-arrow-up-left small"></i>
+                                    </a>
+                                </td>
                                 <?php foreach (FIELDS as $field => $meta): ?>
                                     <?php
                                     [$low, $high] = $ranges[$field][$i];

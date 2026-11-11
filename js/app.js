@@ -217,6 +217,23 @@
       }).join("");
 
       $card.find(".saloon-body").html(rows);
+
+      // مرحله فعال سالن (از بخش اختصاصی سالن)
+      var $stage = $card.find(".saloon-stage .stage-pill");
+      if (saloon.stage) {
+        $stage
+          .html(
+            '<i class="bi ' +
+              (saloon.stage.stage_icon || "bi-diagram-2") +
+              '"></i> مرحله: ' +
+              saloon.stage.stage_name,
+          )
+          .css("--stage-color", saloon.stage.stage_color || "");
+      } else {
+        $stage
+          .html('<i class="bi bi-pause-circle"></i> مرحله‌ای فعال نیست')
+          .css("--stage-color", "");
+      }
     });
     applyFilter();
   }
@@ -243,14 +260,29 @@
             "</span>"
           : '<span class="badge text-bg-success">در محدوده مطلوب</span>';
 
+        var stageCell = s.stage
+          ? '<span class="stage-name" style="--stage-color:' +
+            (s.stage.stage_color || "") +
+            '"><i class="bi ' +
+            (s.stage.stage_icon || "bi-diagram-2") +
+            '"></i>' +
+            s.stage.stage_name +
+            "</span>"
+          : '<span class="text-muted small">—</span>';
+
         return (
           '<tr class="' +
           (s.status === "warn" ? "table-warning-soft" : "") +
           '">' +
-          '<td class="fw-semibold">سالن ' +
+          '<td class="fw-semibold"><a class="saloon-link" href="saloon.php?id=' +
+          s.saloon +
+          '">سالن ' +
           faDigits(s.saloon) +
-          "</td>" +
+          "</a></td>" +
           cells +
+          "<td>" +
+          stageCell +
+          "</td>" +
           "<td>" +
           statusCell +
           "</td>" +
@@ -261,7 +293,7 @@
 
     $("#tableBody").html(
       html ||
-        '<tr><td colspan="5" class="text-center text-muted py-4">داده‌ای موجود نیست.</td></tr>',
+        '<tr><td colspan="6" class="text-center text-muted py-4">داده‌ای موجود نیست.</td></tr>',
     );
   }
 
@@ -296,7 +328,9 @@
           '<span class="alert-text">' +
           "<b>سالن " +
           faDigits(a.saloon) +
-          "</b> — " +
+          "</b>" +
+          (a.stage ? " («" + a.stage + "»)" : "") +
+          " — " +
           a.label +
           '<small class="d-block text-muted">' +
           sign +
@@ -612,6 +646,7 @@
       applyFilter();
     });
 
+    // کلیک روی هشدار: پرش به کارت سالن (کلیک دوم وارد بخش اختصاصی سالن می‌شود)
     $(document).on("click", ".alert-item", function () {
       var id = $(this).attr("href");
       var $target = $(id);

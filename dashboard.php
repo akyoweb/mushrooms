@@ -173,14 +173,20 @@ $cronLastRun = cron_last_run_value();
         </div>
         <div class="row g-3" id="saloonGrid">
             <?php for ($i = 1; $i <= $saloons; $i++): ?>
-                <div class="col-12 col-sm-6 col-lg-4 col-xxl-3 saloon-col" data-saloon="<?= $i ?>">
-                    <div class="saloon-card skeleton" style="--d: <?= $i * 30 ?>ms">
-                        <div class="saloon-head">
-                            <span class="saloon-name">سالن <?= $i ?></span>
-                            <span class="saloon-state"></span>
+                <div class="col-12 col-sm-6 col-lg-4 col-xxl-3 saloon-col" data-saloon="<?= $i ?>" id="saloon-<?= $i ?>">
+                    <a class="saloon-card-link" href="saloon.php?id=<?= $i ?>" title="ورود به بخش اختصاصی سالن <?= $i ?>">
+                        <div class="saloon-card skeleton" style="--d: <?= $i * 30 ?>ms">
+                            <div class="saloon-head">
+                                <span class="saloon-name">سالن <?= $i ?></span>
+                                <span class="saloon-state"></span>
+                            </div>
+                            <div class="saloon-body"></div>
+                            <div class="saloon-stage">
+                                <span class="stage-pill"><i class="bi bi-diagram-2"></i> مرحله: —</span>
+                                <span class="saloon-open">بخش سالن <i class="bi bi-chevron-left"></i></span>
+                            </div>
                         </div>
-                        <div class="saloon-body"></div>
-                    </div>
+                    </a>
                 </div>
             <?php endfor; ?>
         </div>
@@ -202,12 +208,13 @@ $cronLastRun = cron_last_run_value();
                                     <small class="text-muted">(<?= htmlspecialchars($meta['unit']) ?>)</small>
                                 </th>
                             <?php endforeach; ?>
+                            <th>مرحله فعال</th>
                             <th>وضعیت</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-4">در حال بارگذاری...</td>
+                            <td colspan="6" class="text-center text-muted py-4">در حال بارگذاری...</td>
                         </tr>
                     </tbody>
                 </table>
